@@ -1,0 +1,32 @@
+[workspace]
+members = ["patchable", "patchable-macro"]
+resolver = "3"
+
+[workspace.package]
+version = "0.2.1"
+edition = "2024"
+repository = "https://github.com/ShapelessCat/patchable"
+license = "MIT"
+
+[workspace.dependencies]
+proc-macro2 = "1.0.105"
+proc-macro-crate = "3.4.0"
+quote = "1.0.43"
+syn = "2.0.114"
+
+anyhow = "1.0.100"
+thiserror = "2.0.17"
+
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.149" }
+
+[profile.release]
+debug = false
+strip = true
+lto = "fat"
+
+[profile.cpu-profiling]
+inherits = "release"
+debug = true
+strip = false
+lto = "fat"

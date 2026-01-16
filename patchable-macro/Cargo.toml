@@ -1,0 +1,16 @@
+[package]
+name = "patchable-macro"
+description = "Procedural macros for the patchable crate"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2.workspace = true
+proc-macro-crate.workspace = true
+quote.workspace = true
+syn = { workspace = true, features = ["visit"] }
