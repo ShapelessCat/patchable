@@ -1,13 +1,45 @@
 // Re-export the procedural macro
 pub use patchable_macro::Patchable;
 
-/// A trait for structures that can be updated using a patch.
+/// A data structure that can be updated using corresponding patches.
 pub trait Patchable {
     /// The type of patch associated with this structure.
     type Patch: Clone;
 
     /// Applies the given patch to update the structure.
     fn patch(&mut self, patch: Self::Patch);
+}
+
+/// A fallible variant of [`Patchable`].
+///
+/// This trait allows components to apply a patch with validation and return a
+/// custom error when the patch cannot be safely applied.
+pub trait TryPatch {
+    /// The type of patch associated with this structure.
+    type Patch: Clone;
+
+    /// The error type returned when applying a patch fails.
+    type Error: std::error::Error + Send + Sync + 'static;
+
+    /// Applies the provided patch to `self`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the patch is invalid or cannot be applied.
+    fn try_patch(&mut self, patch: Self::Patch) -> Result<(), Self::Error>;
+}
+
+/// Blanket implementation for all [`Patchable`] types, where patching is
+/// infallible.
+impl<T: Patchable> TryPatch for T {
+    type Patch = T::Patch;
+    type Error = std::convert::Infallible;
+
+    #[inline(always)]
+    fn try_patch(&mut self, state: Self::Patch) -> Result<(), Self::Error> {
+        self.patch(state);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -55,5 +87,75 @@ pub(crate) mod test {
         init_scoped_peek.patch(state_struct_value);
         assert_eq!(state, serde_json::to_string(&init_scoped_peek)?);
         Ok(())
+    }
+
+    #[derive(Clone, Default, Debug, Serialize, Deserialize, Patchable)]
+    struct SimpleStruct {
+        val: i32,
+    }
+
+    #[test]
+    fn test_try_patch_blanket_impl() {
+        let mut s = SimpleStruct { val: 10 };
+        // The derived patch struct is compatible with serde.
+        // We use from_str to create the patch.
+        let patch: <SimpleStruct as Patchable>::Patch =
+            serde_json::from_str(r#"{"val": 20}"#).unwrap();
+
+        // Should always succeed for Patchable types due to blanket impl
+        let result = s.try_patch(patch);
+        assert!(result.is_ok());
+        assert_eq!(s.val, 20);
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct FallibleStruct {
+        value: i32,
+    }
+
+    #[derive(Debug, Clone)]
+    struct FalliblePatch(i32);
+
+    #[derive(Debug)]
+    struct PatchError(String);
+
+    impl std::fmt::Display for PatchError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "PatchError: {}", self.0)
+        }
+    }
+
+    impl std::error::Error for PatchError {}
+
+    impl TryPatch for FallibleStruct {
+        type Patch = FalliblePatch;
+        type Error = PatchError;
+
+        fn try_patch(&mut self, patch: Self::Patch) -> Result<(), Self::Error> {
+            if patch.0 < 0 {
+                return Err(PatchError("Value cannot be negative".to_string()));
+            }
+            self.value = patch.0;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_try_patch_custom_error() {
+        let mut s = FallibleStruct { value: 0 };
+
+        // Valid patch
+        assert!(s.try_patch(FalliblePatch(10)).is_ok());
+        assert_eq!(s.value, 10);
+
+        // Invalid patch
+        let result = s.try_patch(FalliblePatch(-5));
+        assert!(result.is_err());
+        assert_eq!(s.value, 10); // Should not have changed
+
+        match result {
+            Err(e) => assert_eq!(e.to_string(), "PatchError: Value cannot be negative"),
+            _ => panic!("Expected error"),
+        }
     }
 }
