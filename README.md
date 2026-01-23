@@ -114,6 +114,48 @@ The macro automatically:
 - Adds appropriate trait bounds (`Clone`, `Patchable`) based on field usage
 - Generates correctly parameterized patch types
 
+### Fallible Patching
+
+The `TryPatch` trait allows for fallible updates, which is useful when patch application requires validation:
+
+```rust
+use patchable::TryPatch;
+use std::fmt;
+
+struct Config {
+    limit: u32,
+}
+
+#[derive(Clone)]
+struct ConfigPatch {
+    limit: u32,
+}
+
+#[derive(Debug)]
+struct InvalidConfigError;
+
+impl fmt::Display for InvalidConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "limit cannot be zero")
+    }
+}
+
+impl std::error::Error for InvalidConfigError {}
+
+impl TryPatch for Config {
+    type Patch = ConfigPatch;
+    type Error = InvalidConfigError;
+
+    fn try_patch(&mut self, patch: Self::Patch) -> Result<(), Self::Error> {
+        if patch.limit == 0 {
+            return Err(InvalidConfigError);
+        }
+        self.limit = patch.limit;
+        Ok(())
+    }
+}
+```
+
 ## How It Works
 
 When you derive `Patchable` on a struct:
@@ -170,6 +212,20 @@ pub trait Patchable {
   applied)
 
 - `patch`: Method to apply a patch to the current instance
+
+### `TryPatch` Trait
+
+A fallible variant of `Patchable` for cases where applying a patch might fail.
+
+```rust
+pub trait TryPatch {
+    type Patch: Clone;
+    type Error: std::error::Error + Send + Sync + 'static;
+    fn try_patch(&mut self, patch: Self::Patch) -> Result<(), Self::Error>;
+}
+```
+
+- `try_patch`: Applies the patch, returning a `Result`. A blanket implementation exists for all types that implement `Patchable` (where `Error` is `std::convert::Infallible`).
 
 ## License
 
