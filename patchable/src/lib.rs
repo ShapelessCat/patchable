@@ -1,3 +1,11 @@
+//! # Patchable
+//!
+//! A crate for handling partial updates to data structures.
+//!
+//! This crate provides the [`Patchable`] trait, which defines how to apply patches to update a data
+//! structure. It also re-exports the
+//! [`patchable_macro::Patchable`] derive macro for easy implementation.
+
 // Re-export the procedural macro
 pub use patchable_macro::Patchable;
 

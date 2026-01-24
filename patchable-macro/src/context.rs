@@ -1,3 +1,12 @@
+//! # Macro Context
+//!
+//! Context and logic for the `Patchable` derive macro.
+//!
+//! This module contains the [`MacroContext`] struct, which analyzes the input struct and generates
+//! the code for:
+//! 1. The companion patch struct (state struct).
+//! 2. The `Patchable` trait implementation.
+
 use std::collections::HashMap;
 
 use proc_macro_crate::{FoundCrate, crate_name};
@@ -25,9 +34,11 @@ pub(crate) struct MacroContext<'a> {
     fields: &'a Fields,
     /// Mapping from preserved type to its usage flag.
     preserved_types: HashMap<&'a Ident, TypeUsage>,
-    /// The list of actions to perform for each field when generating the `patch` method and the state struct.
+    /// The list of actions to perform for each field when generating the `patch` method and the
+    /// state struct.
     ///
-    /// This determines whether a field is copied directly (`Keep`) or recursively patched (`Patch`).
+    /// This determines whether a field is copied directly (`Keep`) or recursively patched
+    /// (`Patch`).
     field_actions: Vec<FieldAction<'a>>,
     /// The name of the generated companion state struct (e.g., `MyStructState`).
     state_struct_name: Ident,
@@ -73,7 +84,7 @@ impl<'a> MacroContext<'a> {
                         "Only a simple generic type can be used", // TODO: remove this limit
                     ));
                 };
-                // Patchable usage overrides Preserved usage
+                // `Patchable` usage overrides `NotPatchable` usage.
                 preserved_types.insert(type_name, TypeUsage::Patchable);
 
                 field_actions.push(FieldAction::Patch {
@@ -82,7 +93,7 @@ impl<'a> MacroContext<'a> {
                 });
             } else {
                 for type_name in collect_used_simple_types(field_type) {
-                    // Only mark as Preserved if not already marked as Patchable
+                    // Only mark as `NotPatchable` if not already marked as `Patchable`.
                     preserved_types
                         .entry(type_name)
                         .or_insert(TypeUsage::NotPatchable);
@@ -392,7 +403,7 @@ fn get_abstract_simple_type_name(t: &Type) -> Option<&Ident> {
     match t {
         Type::Path(tp) if !tp.path.segments.is_empty() => {
             let last_segment = tp.path.segments.last()?;
-            // Ensure the path segment has no arguments (e.g., it's not Vec<T> or Option<T>)
+            // Ensure the path segment has no arguments (e.g., it's not `Vec<T>` or `Option<T>`).
             if matches!(last_segment.arguments, PathArguments::None) {
                 Some(&last_segment.ident)
             } else {
