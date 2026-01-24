@@ -46,7 +46,7 @@ pub(crate) struct MacroContext<'a> {
 }
 
 impl<'a> MacroContext<'a> {
-    pub fn new(input: &'a DeriveInput) -> syn::Result<Self> {
+    pub(crate) fn new(input: &'a DeriveInput) -> syn::Result<Self> {
         let Data::Struct(DataStruct { fields, .. }) = &input.data else {
             panic!("This `Patchable` derive macro can only be applied on structs");
         };
@@ -121,7 +121,7 @@ impl<'a> MacroContext<'a> {
     // struct InputTypeState<T, ...> ...
     // ============================================================
 
-    pub fn build_state_struct(&self) -> TokenStream2 {
+    pub(crate) fn build_state_struct(&self) -> TokenStream2 {
         let state_generic_params = self.collect_state_generics();
         // Empty `<>` is legal in Rust, and add or drop the `<>` doesn't affect the
         // definition. For example, `struct A<>(i32)` and `struct A(i32)` have the
@@ -158,7 +158,7 @@ impl<'a> MacroContext<'a> {
     // impl<T, ...> Patchable for OriginalStruct<T, ...
     // ============================================================
 
-    pub fn build_patchable_trait_impl(&self) -> TokenStream2 {
+    pub(crate) fn build_patchable_trait_impl(&self) -> TokenStream2 {
         let crate_root = &self.crate_path;
         let (impl_generics, type_generics, _) = self.generics.split_for_impl();
         let where_clause = self.build_bounds();
