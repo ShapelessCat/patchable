@@ -1,3 +1,11 @@
+//! # Patchable Macro
+//!
+//! Procedural macro for the `patchable` crate.
+//!
+//! This crate contains the `Patchable` derive macro, which generates:
+//! 1. A companion "Patch" struct (e.g., `MyStructPatch`).
+//! 2. An implementation of the `Patchable` trait for the original struct.
+
 use proc_macro::TokenStream;
 
 use quote::quote;
