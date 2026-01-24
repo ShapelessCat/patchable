@@ -2,14 +2,76 @@
 //!
 //! A crate for handling partial updates to data structures.
 //!
-//! This crate provides the [`Patchable`] trait, which defines how to apply patches to update a data
-//! structure. It also re-exports the
-//! [`patchable_macro::Patchable`] derive macro for easy implementation.
+//! This crate provides the [`Patchable`] and [`TryPatch`] traits, along with a
+//! derive macro [`patchable_macro::Patchable`] for easy implementation.
+//!
+//! ## Motivation
+//!
+//! Many systems receive incremental updates where only a subset of fields change or can be
+//! considered as parts of state. This crate formalizes this pattern by defining a patch type for a
+//! structure and providing a consistent way to apply such patches safely.
 
 // Re-export the procedural macro
 pub use patchable_macro::Patchable;
 
-/// A data structure that can be updated using corresponding patches.
+/// A data structure that can be updated using a corresponding patch.
+///
+/// ## Usage
+///
+/// ```rust
+/// use patchable::Patchable;
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, Serialize)]
+/// pub struct Accumulator<T> {
+///     prev_control_signal: T,
+///     #[serde(skip)]
+///     filter: fn(&i32) -> bool,
+///     accumulated: u32,
+/// }
+///
+/// //vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+/// // If we derive `Patchable` for `Accumulator`, the following `AccumulatorState` and `Patchable`
+/// // implementation for `Accumulator` can be generated automatically.
+///
+/// #[derive(Clone, Deserialize)]
+/// pub struct AccumulatorState<T> {
+///     prev_control_signal: T,
+///     accumulated: u32,
+/// }
+///
+/// impl<T> Patchable for Accumulator<T>
+/// where
+///     T: Clone,
+/// {
+///     type Patch = AccumulatorState<T>;
+///
+///     #[inline(always)]
+///     fn patch(&mut self, state: Self::Patch) {
+///         self.prev_control_signal = state.prev_control_signal;
+///         self.accumulated = state.accumulated;
+///     }
+/// }
+/// //^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+///
+/// let mut accumulator = Accumulator {
+///     prev_control_signal: -1,
+///     filter: |x: &i32| *x > 300,
+///     accumulated: 0,
+/// };
+///
+/// let accumulator_state: AccumulatorState<i32> = serde_json::from_str(
+///     r#"{
+///         "prev_control_signal": 6,
+///         "accumulated": 15
+///     }"#
+/// ).unwrap();
+///
+/// accumulator.patch(accumulator_state);
+///
+/// assert_eq!(accumulator.prev_control_signal, 6i32);
+/// assert_eq!(accumulator.accumulated, 15u32);
+/// ```
 pub trait Patchable {
     /// The type of patch associated with this structure.
     type Patch: Clone;
@@ -20,8 +82,57 @@ pub trait Patchable {
 
 /// A fallible variant of [`Patchable`].
 ///
-/// This trait allows components to apply a patch with validation and return a
-/// custom error when the patch cannot be safely applied.
+/// This trait allows applying a patch with validation, returning a custom error
+/// if the patch cannot be applied.
+///
+/// ## Usage
+///
+/// ```rust
+/// use patchable::TryPatch;
+/// use std::fmt;
+///
+/// #[derive(Debug, PartialEq)]
+/// struct Config {
+///     concurrency: u32,
+/// }
+///
+/// #[derive(Clone)]
+/// struct ConfigPatch {
+///     concurrency: u32,
+/// }
+///
+/// #[derive(Debug)]
+/// struct PatchError(String);
+///
+/// impl fmt::Display for PatchError {
+///     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+///         write!(f, "{}", self.0)
+///     }
+/// }
+///
+/// impl std::error::Error for PatchError {}
+///
+/// impl TryPatch for Config {
+///     type Patch = ConfigPatch;
+///     type Error = PatchError;
+///
+///     fn try_patch(&mut self, patch: Self::Patch) -> Result<(), Self::Error> {
+///         if patch.concurrency == 0 {
+///             return Err(PatchError("Concurrency must be > 0".into()));
+///         }
+///         self.concurrency = patch.concurrency;
+///         Ok(())
+///     }
+/// }
+///
+/// let mut config = Config { concurrency: 1 };
+/// let valid_patch = ConfigPatch { concurrency: 4 };
+/// config.try_patch(valid_patch).unwrap();
+/// assert_eq!(config.concurrency, 4);
+///
+/// let invalid_patch = ConfigPatch { concurrency: 0 };
+/// assert!(config.try_patch(invalid_patch).is_err());
+/// ```
 pub trait TryPatch {
     /// The type of patch associated with this structure.
     type Patch: Clone;
