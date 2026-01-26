@@ -168,7 +168,7 @@ pub(crate) mod test {
     use super::*;
     use serde::{Deserialize, Serialize};
 
-    #[derive(Clone, Default, Debug, Serialize, Deserialize, Patchable)]
+    #[derive(Clone, Default, Debug, Serialize, Patchable)]
     pub struct FakeMeasurement<T, ClosureType> {
         v: T,
         #[allow(dead_code)]
@@ -208,7 +208,7 @@ pub(crate) mod test {
         Ok(())
     }
 
-    #[derive(Clone, Default, Debug, Serialize, Deserialize, Patchable)]
+    #[derive(Clone, Default, Debug, Serialize, Patchable)]
     struct SimpleStruct {
         val: i32,
     }
@@ -227,7 +227,7 @@ pub(crate) mod test {
         assert_eq!(s.val, 20);
     }
 
-    #[derive(Clone, Debug, Serialize, Deserialize, Patchable, PartialEq)]
+    #[derive(Clone, Debug, Serialize, Patchable, PartialEq)]
     struct TupleStruct(i32, u32);
 
     #[test]
@@ -238,7 +238,7 @@ pub(crate) mod test {
         assert_eq!(s, TupleStruct(10, 20));
     }
 
-    #[derive(Clone, Debug, Serialize, Deserialize, Patchable, PartialEq)]
+    #[derive(Clone, Debug, Serialize, Patchable, PartialEq)]
     struct UnitStruct;
 
     #[test]
