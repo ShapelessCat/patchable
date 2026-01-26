@@ -6,18 +6,22 @@
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Build Status](https://github.com/ShapelessCat/patchable/workflows/CI/badge.svg)](https://github.com/ShapelessCat/patchable/actions)
 
-A Rust library for automatically deriving patch types and implementing efficient state updates for target types.
+A Rust library for automatically deriving patch types and implementing efficient updates from patches for target types.
 
-- A `Patchable` trait is provided:
+This project provides:
 
-- A derive macro that automatically generates a companion "patch" type for your target struct and implements `Patchable`
-on the target type.
+- A `Patchable` trait for applying partial updates.
+- A `TryPatch` trait as a fallible version of `Patchable`.
+- A derive macro that generates a companion patch type for a given struct and implements `Patchable`.
 
-  This enables efficient partial updates of struct instances by applying patches, which is particularly useful for:
+This enables efficient partial updates of struct instances by applying patches, which is particularly useful for:
 
-- State management in event-driven systems
-- Incremental updates in streaming applications
-- Serialization/deserialization of state changes
+- State management in event-driven systems.
+- Incremental updates in streaming applications.
+- Serialization/deserialization of state changes.
+
+Note: patch types intentionally do not derive `Serialize`; patches should be created from their companion structs. The
+"serialization" item above refers to serializing a `Patchable` struct to produce its companion patch type instance.
 
 ## Why Patchable?
 
@@ -28,7 +32,8 @@ or update state incrementally.
 
 The provided derive macro handles the heavy lifting:
 
-1. **Patch Type Definition**: For a given a struct definition, it provides fine-grained control over what becomes part of its companion patch:
+1. **Patch Type Definition**: For a given a struct definition, it provides fine-grained control over what becomes part
+   of its companion patch:
 
    - Exclude **non-state fields**.
    - Include **simple fields** directly.
@@ -37,7 +42,7 @@ The provided derive macro handles the heavy lifting:
 2. **Correct Patch Behavior**: The macro generates `Patchable` implementations and
    correct `patch` methods based on the rules in item 1.
 
-3. **Serializable and Deserializable Patches**: Patches can be encoded and decoded for storage or transport.
+3. **Deserializable Patches**: Patches can be decoded for storage or transport.
 
 Patchable automates patch type generation and applies updates with zero runtime overhead.
 
@@ -64,7 +69,17 @@ Patchable automates patch type generation and applies updates with zero runtime 
 - **Generic Support**: Full support for generic types with automatic trait bound inference
 - **Zero Runtime Overhead**: All code generation happens at compile time
 
+## Use Cases
+
+Patchable is a good fit when you want to update state without hand-maintaining parallel structs, such as:
+
+- Event-sourced or durable systems where only state fields should be persisted.
+- Streaming or real-time pipelines that receive incremental updates.
+- Syncing or transporting partial state over the network.
+
 ## Installation
+
+**MSRV:** Rust 1.85 (edition 2024).
 
 Add this to your `Cargo.toml`:
 
@@ -197,6 +212,13 @@ impl TryPatch for Config {
     }
 }
 ```
+
+### Limitations
+
+- Only structs are supported (enums and unions are not).
+- Lifetime parameters are not supported.
+- `#[patchable]` currently only supports simple generic types (not complex types like `Vec<T>`).
+- Generated patch types derive `Clone` and `Deserialize` but not `Serialize` (by design).
 
 ## How It Works
 
