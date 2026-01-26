@@ -227,6 +227,28 @@ pub(crate) mod test {
         assert_eq!(s.val, 20);
     }
 
+    #[derive(Clone, Debug, Serialize, Deserialize, Patchable, PartialEq)]
+    struct TupleStruct(i32, u32);
+
+    #[test]
+    fn test_tuple_struct_patch() {
+        let mut s = TupleStruct(1, 2);
+        let patch: <TupleStruct as Patchable>::Patch = serde_json::from_str(r#"[10, 20]"#).unwrap();
+        s.patch(patch);
+        assert_eq!(s, TupleStruct(10, 20));
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize, Patchable, PartialEq)]
+    struct UnitStruct;
+
+    #[test]
+    fn test_unit_struct_patch() {
+        let mut s = UnitStruct;
+        let patch: <UnitStruct as Patchable>::Patch = serde_json::from_str("null").unwrap();
+        s.patch(patch);
+        assert_eq!(s, UnitStruct);
+    }
+
     #[derive(Debug, PartialEq)]
     struct FallibleStruct {
         value: i32,
