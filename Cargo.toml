@@ -10,7 +10,7 @@ homepage = "https://github.com/ShapelessCat/patchable"
 documentation = "https://docs.rs/patchable"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
-description = "Automatically derive patch types for efficient partial state updates with zero runtime overhead"
+description = "Automatically derive patch types for Rust structs to enable efficient partial updates with zero runtime overhead"
 categories = ["data-structures", "rust-patterns"]
 keywords = ["patch", "update", "derive", "macro", "serde"]
 
