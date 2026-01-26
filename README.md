@@ -4,9 +4,9 @@
 [![Documentation](https://docs.rs/patchable/badge.svg)](https://docs.rs/patchable)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Build](https://github.com/ShapelessCat/patchable/actions/workflows/build.yaml/badge.svg?branch=main)](https://github.com/ShapelessCat/patchable/actions/workflows/build.yaml)
-[![Lint](https://github.com/ShapelessCat/patchable/actions/workflows/lint.yaml/badge.svg?branch=main)](https://github.com/ShapelessCat/patchable/actions/workflows/lint.yaml)
-[![Test](https://github.com/ShapelessCat/patchable/actions/workflows/test.yaml/badge.svg?branch=main)](https://github.com/ShapelessCat/patchable/actions/workflows/test.yaml)
+[![Build](https://github.com/ShapelessCat/patchable/actions/workflows/build.yaml/badge.svg)](https://github.com/ShapelessCat/patchable/actions/workflows/build.yaml)
+[![Lint](https://github.com/ShapelessCat/patchable/actions/workflows/lint.yaml/badge.svg)](https://github.com/ShapelessCat/patchable/actions/workflows/lint.yaml)
+[![Test](https://github.com/ShapelessCat/patchable/actions/workflows/test.yaml/badge.svg)](https://github.com/ShapelessCat/patchable/actions/workflows/test.yaml)
 
 A Rust library for automatically deriving patch types and implementing efficient updates from patches for target types.
 
