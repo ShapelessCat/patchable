@@ -1,6 +1,6 @@
 [package]
 name = "patchable-macro"
-description = "Derive macro for the patchable crate"
+description = "Macros 1.1 implementation of #[derive(Patchable)] for the patchable crate"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
