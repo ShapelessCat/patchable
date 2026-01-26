@@ -6,7 +6,11 @@ resolver = "3"
 version = "0.4.0"
 edition = "2024"
 repository = "https://github.com/ShapelessCat/patchable"
-license = "MIT"
+homepage = "https://github.com/ShapelessCat/patchable"
+documentation = "https://docs.rs/patchable"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+description = "Automatically derive patch types for efficient partial state updates with zero runtime overhead"
 categories = ["data-structures", "rust-patterns"]
 keywords = ["patch", "update", "derive", "macro", "serde"]
 
