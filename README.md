@@ -10,9 +10,10 @@ A Rust library for automatically deriving patch types and implementing efficient
 
 This project provides:
 
-- A `Patchable` trait for applying partial updates.
-- A `TryPatch` trait as a fallible version of `Patchable`.
-- A derive macro that generates a companion patch type for a given struct and implements `Patchable`.
+- A `Patchable` trait for declaring patch types.
+- A `Patch` trait for applying partial updates.
+- A `TryPatch` trait as a fallible version of `Patch`.
+- Derive macros that generate companion patch types (`Patchable`) and infallible patch logic (`Patch`).
 
 This enables efficient partial updates of struct instances by applying patches, which is particularly useful for:
 
@@ -21,7 +22,7 @@ This enables efficient partial updates of struct instances by applying patches, 
 - Serialization/deserialization of state changes.
 
 Note: patch types intentionally do not derive `Serialize`; patches should be created from their companion structs. The
-"serialization" item above refers to serializing a `Patchable` struct to produce its companion patch type instance.
+"serialization" item above refers to serializing a `Patchable` type to produce its companion patch type instance.
 
 ## Why Patchable?
 
@@ -30,7 +31,7 @@ parallel "state" structs. A common example is durable execution: save only true
 state while skipping non-state fields (caches, handles, closures), then restore
 or update state incrementally.
 
-The provided derive macro handles the heavy lifting:
+The provided derive macros handle the heavy lifting:
 
 1. **Patch Type Definition**: For a given a struct definition, it provides fine-grained control over what becomes part
    of its companion patch:
@@ -39,7 +40,7 @@ The provided derive macro handles the heavy lifting:
    - Include **simple fields** directly.
    - Include **complex fields**, which have their own patch types, indirectly by including their patches.
 
-2. **Correct Patch Behavior**: The macro generates `Patchable` implementations and
+2. **Correct Patch Behavior**: The macro generates `Patch` implementations and
    correct `patch` methods based on the rules in item 1.
 
 3. **Deserializable Patches**: Patches can be decoded for storage or transport.
@@ -62,7 +63,7 @@ Patchable automates patch type generation and applies updates with zero runtime 
 
 ## Features
 
-- **Automatic Patch Type Generation**: Derives a companion `State` struct for any struct annotated with `#[derive(Patchable)]`
+- **Automatic Patch Type Generation**: Derives a companion `Patch` struct for any struct annotated with `#[derive(Patchable)]`
 - **Recursive Patching**: Use `#[patchable]` attribute to mark fields that require recursive patching
 - **Smart Exclusion**: Respects `#[serde(skip)]` and `#[serde(skip_serializing)]`, and `PhantomData` to keep patches lean.
 - **Serde Integration**: Generated patch types automatically implement `serde::Deserialize` and `Clone`
@@ -93,10 +94,10 @@ patchable = "0.4.1"
 ### Basic Example
 
 ```rust
-use patchable::Patchable;
+use patchable::{Patch, Patchable};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, Patchable)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, Patchable, Patch)]
 struct User {
     id: u64,
     name: String,
@@ -114,7 +115,7 @@ fn main() {
     let state_json = serde_json::to_string(&user).unwrap();
     
     // Deserialize into a patch
-    let patch: UserState = serde_json::from_str(&state_json).unwrap();
+    let patch: UserPatch = serde_json::from_str(&state_json).unwrap();
     
     let mut default = User::default();
     // Apply the patch
@@ -129,10 +130,10 @@ fn main() {
 Fields can be excluded from patching using serde attributes:
 
 ```rust
-use patchable::Patchable;
+use patchable::{Patch, Patchable};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize, Patchable)]
+#[derive(Clone, Debug, Serialize, Deserialize, Patchable, Patch)]
 struct Measurement<T, F> {
     value: T,
     #[serde(skip)]
@@ -144,20 +145,20 @@ Fields marked with `#[serde(skip)]` or `#[serde(skip_serializing)]` are automati
 
 ### Nested Patchable Structs
 
-The macro fully supports generic types:
+The macros fully support generic types:
 
 ```rust
-use patchable::Patchable;
+use patchable::{Patch, Patchable};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize, Patchable)]
+#[derive(Clone, Debug, Serialize, Deserialize, Patchable, Patch)]
 struct Container<Closure> {
     #[serde(skip)]
     computation_logic: Closure, // Not a part of state
     metadata: String,
 }
 
-#[derive(Clone, Debug, Serialize, Patchable)]
+#[derive(Clone, Debug, Serialize, Patchable, Patch)]
 struct Wrapper<T, Closure> {
     data: T,
     #[patchable]
@@ -165,10 +166,10 @@ struct Wrapper<T, Closure> {
 }
 ```
 
-The macro automatically:
+The macros automatically:
 
 - Preserves only the generic parameters used in non-skipped fields
-- Adds appropriate trait bounds (`Clone`, `Patchable`) based on field usage
+- Adds appropriate trait bounds (`Clone`, `Patchable`, `Patch`) based on field usage
 - Generates correctly parameterized patch types
 
 ### Fallible Patching
@@ -176,7 +177,7 @@ The macro automatically:
 The `TryPatch` trait allows for fallible updates, which is useful when patch application requires validation:
 
 ```rust
-use patchable::TryPatch;
+use patchable::{TryPatch, Patchable};
 use std::fmt;
 
 struct Config {
@@ -199,8 +200,11 @@ impl fmt::Display for InvalidConfigError {
 
 impl std::error::Error for InvalidConfigError {}
 
-impl TryPatch for Config {
+impl Patchable for Config {
     type Patch = ConfigPatch;
+}
+
+impl TryPatch for Config {
     type Error = InvalidConfigError;
 
     fn try_patch(&mut self, patch: Self::Patch) -> Result<(), Self::Error> {
@@ -224,7 +228,7 @@ impl TryPatch for Config {
 
 When you derive `Patchable` on a struct:
 
-1. **Patch Type Generation**: A companion struct named `{StructName}State` is generated
+1. **Patch Type Generation**: A companion struct named `{StructName}Patch` is generated
    - Fields marked with `#[patchable]` use their own patch types (`T::Patch`)
    - Other fields are copied directly with their original types
    - Fields with `#[serde(skip)]`, `#[serde(skip_serializing)]` or `PhantomData` are excluded
@@ -234,19 +238,28 @@ When you derive `Patchable` on a struct:
    ```rust
    pub trait Patchable {
        type Patch: Clone;
-       fn patch(&mut self, patch: Self::Patch);
    }
    ```
 
-3. **Patch Method**: The `patch` method updates the struct:
+When you derive `Patch` on a struct:
+
+1. **Patch Method**: The `patch` method updates the struct:
    - Regular fields are directly assigned from the patch
    - `#[patchable]` fields are recursively patched via their own `patch` method
+
+2. **Trait Implementation**: The `Patch` trait is implemented:
+
+   ```rust
+   pub trait Patch: Patchable {
+       fn patch(&mut self, patch: Self::Patch);
+   }
+   ```
 
 ## API Reference
 
 ### `#[derive(Patchable)]`
 
-Derives the `Patchable` trait for a struct.
+Generates the companion `{StructName}Patch` type and implements `Patchable` for a struct.
 
 **Requirements:**
 
@@ -254,13 +267,24 @@ Derives the `Patchable` trait for a struct.
 - Does not support lifetime parameters (borrowed fields)
 - Works with named, unnamed (tuple), and unit structs
 
+### `#[derive(Patch)]`
+
+Derives the `Patch` trait implementation for a struct.
+
+**Requirements:**
+
+- Must be applied to a struct (not enums or unions)
+- Does not support lifetime parameters (borrowed fields)
+- Works with named, unnamed (tuple), and unit structs
+- The target type must implement `Patchable` (derive it or implement manually)
+
 ### `#[patchable]` Attribute
 
 Marks a field for recursive patching.
 
 **Requirements:**
 
-- The types of fields with `#[patchable]` must implement `Patchable`
+- The types of fields with `#[patchable]` must implement `Patch`
 - Currently only supports simple generic types (not complex types like `Vec<T>`)
 
 ### `Patchable` Trait
@@ -268,29 +292,35 @@ Marks a field for recursive patching.
 ```rust
 pub trait Patchable {
     type Patch: Clone;
-    fn patch(&mut self, patch: Self::Patch);
 }
 ```
 
-- `Patch`: The associated patch type (automatically generated as `{StructName}State` if `#[derive(Patchable)]` is
+- `Patch`: The associated patch type (automatically generated as `{StructName}Patch` if `#[derive(Patchable)]` is
   applied)
+
+### `Patch` Trait
+
+```rust
+pub trait Patch: Patchable {
+    fn patch(&mut self, patch: Self::Patch);
+}
+```
 
 - `patch`: Method to apply a patch to the current instance
 
 ### `TryPatch` Trait
 
-A fallible variant of `Patchable` for cases where applying a patch might fail.
+A fallible variant of `Patch` for cases where applying a patch might fail.
 
 ```rust
-pub trait TryPatch {
-    type Patch: Clone;
+pub trait TryPatch: Patchable {
     type Error: std::error::Error + Send + Sync + 'static;
     fn try_patch(&mut self, patch: Self::Patch) -> Result<(), Self::Error>;
 }
 ```
 
 - `try_patch`: Applies the patch, returning a `Result`. A blanket implementation exists for all types that implement
-  `Patchable` (where `Error` is `std::convert::Infallible`).
+  `Patch` (where `Error` is `std::convert::Infallible`).
 
 ## Contributing
 
