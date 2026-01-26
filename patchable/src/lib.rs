@@ -2,8 +2,9 @@
 //!
 //! A crate for handling partial updates to data structures.
 //!
-//! This crate provides the [`Patchable`] and [`TryPatch`] traits, along with a
-//! derive macro [`patchable_macro::Patchable`] for easy implementation.
+//! This crate provides the [`Patchable`], [`Patch`], and [`TryPatch`] traits, along with
+//! derive macros [`patchable_macro::Patchable`] and [`patchable_macro::Patch`] for easy
+//! implementation.
 //!
 //! ## Motivation
 //!
@@ -12,14 +13,14 @@
 //! structure and providing a consistent way to apply such patches safely.
 
 // Re-export the procedural macro
-pub use patchable_macro::Patchable;
+pub use patchable_macro::{Patch, Patchable};
 
 /// A data structure that can be updated using a corresponding patch.
 ///
 /// ## Usage
 ///
 /// ```rust
-/// use patchable::Patchable;
+/// use patchable::{Patch, Patchable};
 /// use serde::{Deserialize, Serialize};
 ///
 /// #[derive(Debug, Serialize)]
@@ -31,11 +32,11 @@ pub use patchable_macro::Patchable;
 /// }
 ///
 /// //vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-/// // If we derive `Patchable` for `Accumulator`, the following `AccumulatorState` and `Patchable`
-/// // implementation for `Accumulator` can be generated automatically.
+/// // If we derive `Patchable` and `Patch` for `Accumulator`, the following `AccumulatorPatch`
+/// // plus `Patchable`/`Patch` implementations can be generated automatically.
 ///
 /// #[derive(Clone, Deserialize)]
-/// pub struct AccumulatorState<T> {
+/// pub struct AccumulatorPatch<T> {
 ///     prev_control_signal: T,
 ///     accumulated: u32,
 /// }
@@ -44,12 +45,17 @@ pub use patchable_macro::Patchable;
 /// where
 ///     T: Clone,
 /// {
-///     type Patch = AccumulatorState<T>;
+///     type Patch = AccumulatorPatch<T>;
+/// }
 ///
+/// impl<T> Patch for Accumulator<T>
+/// where
+///     T: Clone,
+/// {
 ///     #[inline(always)]
-///     fn patch(&mut self, state: Self::Patch) {
-///         self.prev_control_signal = state.prev_control_signal;
-///         self.accumulated = state.accumulated;
+///     fn patch(&mut self, patch: Self::Patch) {
+///         self.prev_control_signal = patch.prev_control_signal;
+///         self.accumulated = patch.accumulated;
 ///     }
 /// }
 /// //^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -60,27 +66,31 @@ pub use patchable_macro::Patchable;
 ///     accumulated: 0,
 /// };
 ///
-/// let accumulator_state: AccumulatorState<i32> = serde_json::from_str(
+/// let accumulator_patch: AccumulatorPatch<i32> = serde_json::from_str(
 ///     r#"{
 ///         "prev_control_signal": 6,
 ///         "accumulated": 15
 ///     }"#
 /// ).unwrap();
 ///
-/// accumulator.patch(accumulator_state);
+/// accumulator.patch(accumulator_patch);
 ///
 /// assert_eq!(accumulator.prev_control_signal, 6i32);
 /// assert_eq!(accumulator.accumulated, 15u32);
 /// ```
+/// Declares the associated patch type for a structure.
 pub trait Patchable {
     /// The type of patch associated with this structure.
     type Patch: Clone;
+}
 
+/// A data structure that can be updated using a corresponding patch.
+pub trait Patch: Patchable {
     /// Applies the given patch to update the structure.
     fn patch(&mut self, patch: Self::Patch);
 }
 
-/// A fallible variant of [`Patchable`].
+/// A fallible variant of [`Patch`].
 ///
 /// This trait allows applying a patch with validation, returning a custom error
 /// if the patch cannot be applied.
@@ -88,7 +98,7 @@ pub trait Patchable {
 /// ## Usage
 ///
 /// ```rust
-/// use patchable::TryPatch;
+/// use patchable::{TryPatch, Patchable};
 /// use std::fmt;
 ///
 /// #[derive(Debug, PartialEq)]
@@ -112,8 +122,11 @@ pub trait Patchable {
 ///
 /// impl std::error::Error for PatchError {}
 ///
-/// impl TryPatch for Config {
+/// impl Patchable for Config {
 ///     type Patch = ConfigPatch;
+/// }
+///
+/// impl TryPatch for Config {
 ///     type Error = PatchError;
 ///
 ///     fn try_patch(&mut self, patch: Self::Patch) -> Result<(), Self::Error> {
@@ -133,10 +146,7 @@ pub trait Patchable {
 /// let invalid_patch = ConfigPatch { concurrency: 0 };
 /// assert!(config.try_patch(invalid_patch).is_err());
 /// ```
-pub trait TryPatch {
-    /// The type of patch associated with this structure.
-    type Patch: Clone;
-
+pub trait TryPatch: Patchable {
     /// The error type returned when applying a patch fails.
     type Error: std::error::Error + Send + Sync + 'static;
 
@@ -148,15 +158,14 @@ pub trait TryPatch {
     fn try_patch(&mut self, patch: Self::Patch) -> Result<(), Self::Error>;
 }
 
-/// Blanket implementation for all [`Patchable`] types, where patching is
+/// Blanket implementation for all [`Patch`] types, where patching is
 /// infallible.
-impl<T: Patchable> TryPatch for T {
-    type Patch = T::Patch;
+impl<T: Patch> TryPatch for T {
     type Error = std::convert::Infallible;
 
     #[inline(always)]
-    fn try_patch(&mut self, state: Self::Patch) -> Result<(), Self::Error> {
-        self.patch(state);
+    fn try_patch(&mut self, patch: Self::Patch) -> Result<(), Self::Error> {
+        self.patch(patch);
         Ok(())
     }
 }
@@ -168,7 +177,7 @@ pub(crate) mod test {
     use super::*;
     use serde::{Deserialize, Serialize};
 
-    #[derive(Clone, Default, Debug, Serialize, Patchable)]
+    #[derive(Clone, Default, Debug, Serialize, Patchable, Patch)]
     struct FakeMeasurement<T, ClosureType> {
         v: T,
         #[allow(dead_code)]
@@ -179,7 +188,7 @@ pub(crate) mod test {
     #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
     struct MeasurementResult<T>(pub T);
 
-    #[derive(Clone, Debug, Serialize, Patchable, PartialEq)]
+    #[derive(Clone, Debug, Serialize, Patchable, Patch, PartialEq)]
     struct ScopedMeasurement<ScopeType, MeasurementType, MeasurementOutput> {
         current_control_level: ScopeType,
         #[patchable]
@@ -208,7 +217,7 @@ pub(crate) mod test {
         Ok(())
     }
 
-    #[derive(Clone, Default, Debug, Serialize, Patchable)]
+    #[derive(Clone, Default, Debug, Serialize, Patchable, Patch)]
     struct SimpleStruct {
         val: i32,
     }
@@ -221,13 +230,13 @@ pub(crate) mod test {
         let patch: <SimpleStruct as Patchable>::Patch =
             serde_json::from_str(r#"{"val": 20}"#).unwrap();
 
-        // Should always succeed for Patchable types due to blanket impl
+        // Should always succeed for `Patch` types due to blanket impl
         let result = s.try_patch(patch);
         assert!(result.is_ok());
         assert_eq!(s.val, 20);
     }
 
-    #[derive(Clone, Debug, Serialize, Patchable, PartialEq)]
+    #[derive(Clone, Debug, Serialize, Patchable, Patch, PartialEq)]
     struct TupleStruct(i32, u32);
 
     #[test]
@@ -238,7 +247,7 @@ pub(crate) mod test {
         assert_eq!(s, TupleStruct(10, 20));
     }
 
-    #[derive(Clone, Debug, Serialize, Patchable, PartialEq)]
+    #[derive(Clone, Debug, Serialize, Patchable, Patch, PartialEq)]
     struct UnitStruct;
 
     #[test]
@@ -268,8 +277,11 @@ pub(crate) mod test {
 
     impl std::error::Error for PatchError {}
 
-    impl TryPatch for FallibleStruct {
+    impl Patchable for FallibleStruct {
         type Patch = FalliblePatch;
+    }
+
+    impl TryPatch for FallibleStruct {
         type Error = PatchError;
 
         fn try_patch(&mut self, patch: Self::Patch) -> Result<(), Self::Error> {
