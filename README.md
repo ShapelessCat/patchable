@@ -4,7 +4,7 @@
 [![Documentation](https://docs.rs/patchable/badge.svg)](https://docs.rs/patchable)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Build Status](https://github.com/ShapelessCat/patchable/workflows/CI/badge.svg)](https://github.com/ShapelessCat/patchable/actions)
+[![Build Status](https://github.com/ShapelessCat/patchable/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/ShapelessCat/patchable/actions/workflows/ci.yaml)
 
 A Rust library for automatically deriving patch types and implementing efficient updates from patches for target types.
 
