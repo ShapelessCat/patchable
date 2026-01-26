@@ -1,6 +1,12 @@
 # Patchable
 
-A Rust library with for automatically deriving patch types and implementing efficient state updates for target types.
+[![Crates.io](https://img.shields.io/crates/v/patchable.svg)](https://crates.io/crates/patchable)
+[![Documentation](https://docs.rs/patchable/badge.svg)](https://docs.rs/patchable)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Build Status](https://github.com/ShapelessCat/patchable/workflows/CI/badge.svg)](https://github.com/ShapelessCat/patchable/actions)
+
+A Rust library for automatically deriving patch types and implementing efficient state updates for target types.
 
 - A `Patchable` trait is provided:
 
@@ -12,6 +18,42 @@ on the target type.
 - State management in event-driven systems
 - Incremental updates in streaming applications
 - Serialization/deserialization of state changes
+
+## Why Patchable?
+
+Patchable shines when you need to persist and update state without hand-maintaining
+parallel "state" structs. A common example is durable execution: save only true
+state while skipping non-state fields (caches, handles, closures), then restore
+or update state incrementally.
+
+The provided derive macro handles the heavy lifting:
+
+1. **Patch Type Definition**: For a given a struct definition, it provides fine-grained control over what becomes part of its companion patch:
+
+   - Exclude **non-state fields**.
+   - Include **simple fields** directly.
+   - Include **complex fields**, which have their own patch types, indirectly by including their patches.
+
+2. **Correct Patch Behavior**: The macro generates `Patchable` implementations and
+   correct `patch` methods based on the rules in item 1.
+
+3. **Serializable and Deserializable Patches**: Patches can be encoded and decoded for storage or transport.
+
+Patchable automates patch type generation and applies updates with zero runtime overhead.
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Basic Example](#basic-example)
+  - [Skipping Fields](#skipping-fields)
+  - [Nested Patchable Structs](#nested-patchable-structs)
+  - [Fallible Patching](#fallible-patching)
+- [How It Works](#how-it-works)
+- [API Reference](#api-reference)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
@@ -28,7 +70,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-patchable = "0.1.0"
+patchable = "0.4.0"
 ```
 
 ## Usage
@@ -225,12 +267,21 @@ pub trait TryPatch {
 }
 ```
 
-- `try_patch`: Applies the patch, returning a `Result`. A blanket implementation exists for all types that implement `Patchable` (where `Error` is `std::convert::Infallible`).
-
-## License
-
-MIT
+- `try_patch`: Applies the patch, returning a `Result`. A blanket implementation exists for all types that implement
+  `Patchable` (where `Error` is `std::convert::Infallible`).
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit issues or pull requests.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to get started.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE-MIT) and [Apache-2.0 License](LICENSE-APACHE).
+
+## Related Projects
+
+- [serde](https://serde.rs/) - Serialization framework that integrates seamlessly with Patchable
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes and version history.
