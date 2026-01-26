@@ -7,9 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-01-26
+
 ### Added
 
-- Improved project documentation and metadata for better discoverability
+- Manifest categories and keywords for better discoverability
+- Tests for tuple struct and unit struct patching
+- CHANGELOG.md, CONTRIBUTING.md, and VSCode file associations
+
+### Changed
+
+- Improved error handling in `MacroContext::new` for struct validation
+- Updated project licenses and manifests
+- Refined README and doc comments (examples, descriptions, badge icon)
 
 ## [0.4.0] - 2026-01-24
 
@@ -34,5 +44,6 @@ Early development, and you shouldn't use these versions for your projects.
 - Automatic patch type generation
 - Basic field patching functionality
 
-[Unreleased]: https://github.com/ShapelessCat/patchable/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/ShapelessCat/patchable/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/ShapelessCat/patchable/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ShapelessCat/patchable/releases/tag/v0.4.0

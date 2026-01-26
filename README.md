@@ -85,7 +85,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-patchable = "0.4.0"
+patchable = "0.4.1"
 ```
 
 ## Usage
