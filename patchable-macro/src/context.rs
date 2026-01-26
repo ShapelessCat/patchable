@@ -48,17 +48,23 @@ pub(crate) struct MacroContext<'a> {
 impl<'a> MacroContext<'a> {
     pub(crate) fn new(input: &'a DeriveInput) -> syn::Result<Self> {
         let Data::Struct(DataStruct { fields, .. }) = &input.data else {
-            panic!("This `Patchable` derive macro can only be applied on structs");
+            return Err(syn::Error::new_spanned(
+                input,
+                "This `Patchable` derive macro can only be applied on structs",
+            ));
         };
 
-        assert!(
-            input
-                .generics
-                .params
-                .iter()
-                .all(|g| !matches!(g, GenericParam::Lifetime(_))),
-            "`Patchable` does not support borrowed fields"
-        );
+        if input
+            .generics
+            .params
+            .iter()
+            .any(|g| matches!(g, GenericParam::Lifetime(_)))
+        {
+            return Err(syn::Error::new_spanned(
+                &input.generics,
+                "`Patchable` does not support borrowed fields",
+            ));
+        }
 
         let mut preserved_types: HashMap<&Ident, TypeUsage> = HashMap::new();
         let mut field_actions = vec![];
