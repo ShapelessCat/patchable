@@ -1,12 +1,14 @@
 [package]
 name = "patchable-macro"
-description = "Procedural macros for the patchable crate"
+description = "Derive macro for the patchable crate"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
 license.workspace = true
 categories.workspace = true
 keywords.workspace = true
+documentation.workspace = true
+readme.workspace = true
 
 [lib]
 proc-macro = true
