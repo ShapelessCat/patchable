@@ -72,10 +72,9 @@ impl<'a> MacroContext<'a> {
         let mut preserved_types: HashMap<&Ident, TypeUsage> = HashMap::new();
         let mut field_actions = vec![];
 
-        let stateful_fields: Vec<&Field> =
-            fields.iter().filter(|f| !has_serde_skip_attr(f)).collect();
+        let stateful_fields = fields.iter().filter(|f| !has_serde_skip_attr(f));
 
-        for (index, field) in stateful_fields.iter().enumerate() {
+        for (index, field) in stateful_fields.enumerate() {
             let member = if let Some(field_name) = field.ident.as_ref() {
                 FieldMember::Named(field_name.clone())
             } else {
@@ -132,11 +131,7 @@ impl<'a> MacroContext<'a> {
     // ============================================================
 
     pub(crate) fn build_patch_struct(&self) -> TokenStream2 {
-        let patch_generic_params = self.collect_patch_generics();
-        // Empty `<>` is legal in Rust, and add or drop the `<>` doesn't affect the
-        // definition. For example, `struct A<>(i32)` and `struct A(i32)` have the
-        // same HIR.
-        let generic_params = quote! { <#(#patch_generic_params),*> };
+        let generic_params = self.build_patch_type_generics();
 
         let mut bounded_types = Vec::new();
         let patchable_trait = &self.patchable_trait;
@@ -152,11 +147,11 @@ impl<'a> MacroContext<'a> {
         };
 
         let patch_fields = self.generate_patch_fields();
-        let body = match &self.fields {
-            Fields::Named(_) => quote! { #generic_params #where_clause { #(#patch_fields),* } },
-            Fields::Unnamed(_) => quote! { #generic_params #where_clause ( #(#patch_fields),* ); },
-            Fields::Unit => quote! {;},
-        };
+        let body = self.select_fields(
+            quote! { #generic_params #where_clause { #(#patch_fields),* } },
+            quote! { #generic_params #where_clause ( #(#patch_fields),* ); },
+            quote! {;},
+        );
         let patch_name = &self.patch_struct_name;
         quote! {
             #[derive(::core::clone::Clone, ::serde::Deserialize)]
@@ -191,8 +186,7 @@ impl<'a> MacroContext<'a> {
 
     pub(crate) fn build_from_trait_impl(&self) -> TokenStream2 {
         let (impl_generics, type_generics, _) = self.generics.split_for_impl();
-        let patch_generic_params = self.collect_patch_generics();
-        let patch_type_generics = quote! { <#(#patch_generic_params),*> };
+        let patch_type_generics = self.build_patch_type_generics();
         let where_clause = self.build_from_where_clause();
 
         let input_struct_name = self.struct_name;
@@ -306,18 +300,17 @@ impl<'a> MacroContext<'a> {
                 ),
             };
 
-            match &self.fields {
-                Fields::Named(_) => quote! { #member: #expr },
-                Fields::Unnamed(_) => quote! { #expr },
-                Fields::Unit => quote! {},
-            }
+            self.select_fields(quote! { #member: #expr }, quote! { #expr }, quote! {})
         });
 
-        match &self.fields {
-            Fields::Named(_) => quote! { Self { #(#field_expressions),* } },
-            Fields::Unnamed(_) => quote! { Self( #(#field_expressions),* ) },
-            Fields::Unit => quote! { Self },
-        }
+        let body = quote! { #(#field_expressions),* };
+        let body_ref = &body;
+
+        self.select_fields(
+            quote! { Self { #body_ref } },
+            quote! { Self(#body_ref) },
+            quote! { Self },
+        )
     }
 
     fn collect_patch_generics(&self) -> Vec<Ident> {
@@ -345,23 +338,7 @@ impl<'a> MacroContext<'a> {
             }
         }
 
-        if let Some(where_clause) = &self.generics.where_clause {
-            let normalized_input_where_clause = if where_clause.predicates.empty_or_trailing() {
-                quote! { #where_clause }
-            } else {
-                quote! { #where_clause, }
-            };
-            quote! {
-                #normalized_input_where_clause
-                #(#bounded_types),*
-            }
-        } else if !bounded_types.is_empty() {
-            quote! {
-                where #(#bounded_types),*
-            }
-        } else {
-            quote! {}
-        }
+        self.extend_where_clause(bounded_types)
     }
 
     // ============================================================
@@ -369,16 +346,10 @@ impl<'a> MacroContext<'a> {
     // ============================================================
 
     fn build_associate_type_declaration(&self) -> TokenStream2 {
-        let mut args = Vec::new();
-        for param in self.generics.type_params() {
-            let t = &param.ident;
-            if self.preserved_types.contains_key(t) {
-                args.push(quote! { #t });
-            }
-        }
+        let patch_type_generics = self.build_patch_type_generics();
         let state_name = &self.patch_struct_name;
         quote! {
-            type Patch = #state_name <#(#args),*>;
+            type Patch = #state_name #patch_type_generics;
         }
     }
 
@@ -395,8 +366,20 @@ impl<'a> MacroContext<'a> {
             }
         }
 
+        self.extend_where_clause(bounded_types)
+    }
+
+    fn build_patch_type_generics(&self) -> TokenStream2 {
+        let patch_generic_params = self.collect_patch_generics();
+        // Empty `<>` is legal in Rust, and add or drop the `<>` doesn't affect the
+        // definition. For example, `struct A<>(i32)` and `struct A(i32)` have the
+        // same HIR.
+        quote! { <#(#patch_generic_params),*> }
+    }
+
+    fn extend_where_clause(&self, bounds: Vec<TokenStream2>) -> TokenStream2 {
         if let Some(where_clause) = &self.generics.where_clause {
-            if bounded_types.is_empty() {
+            if bounds.is_empty() {
                 return quote! { #where_clause };
             }
 
@@ -407,14 +390,27 @@ impl<'a> MacroContext<'a> {
             };
             quote! {
                 #normalized_input_where_clause
-                #(#bounded_types),*
+                #(#bounds),*
             }
-        } else if !bounded_types.is_empty() {
+        } else if !bounds.is_empty() {
             quote! {
-                where #(#bounded_types),*
+                where #(#bounds),*
             }
         } else {
             quote! {}
+        }
+    }
+
+    fn select_fields(
+        &self,
+        named: TokenStream2,
+        unnamed: TokenStream2,
+        unit: TokenStream2,
+    ) -> TokenStream2 {
+        match &self.fields {
+            Fields::Named(_) => named,
+            Fields::Unnamed(_) => unnamed,
+            Fields::Unit => unit,
         }
     }
 }

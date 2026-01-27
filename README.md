@@ -33,19 +33,19 @@ or update state incrementally.
 
 The provided derive macros handle the heavy lifting:
 
-1. **Patch Type Definition**: For a given a struct definition, it provides fine-grained control over what becomes part
-   of its companion patch:
+1. **Patch Type Definition**: For a given a struct definition, `#[derive(Patchable)]` provides
+   fine-grained control over what becomes part of its companion patch:
 
    - Exclude **non-state fields**.
    - Include **simple fields** directly.
    - Include **complex fields**, which have their own patch types, indirectly by including their patches.
 
+   When `#[derive(Patchable)]` is used, a `From<Struct>` for `StructPatch` will be generated, too.
+
 2. **Correct Patch Behavior**: The macro generates `Patch` implementations and
    correct `patch` methods based on the rules in item 1.
 
 3. **Deserializable Patches**: Patches can be decoded for storage or transport.
-
-Patchable automates patch type generation and applies updates with zero runtime overhead.
 
 ## Table of Contents
 
