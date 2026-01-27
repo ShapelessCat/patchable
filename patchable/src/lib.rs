@@ -48,6 +48,15 @@ pub use patchable_macro::{Patch, Patchable};
 ///     type Patch = AccumulatorPatch<T>;
 /// }
 ///
+/// impl<T> From<Accumulator<T>> for AccumulatorPatch<T> {
+///     fn from(acc: Accumulator<T>) -> Self {
+///         Self {
+///             prev_control_signal: acc.prev_control_signal,
+///             accumulated: acc.accumulated,
+///         }
+///     }
+/// }
+///
 /// impl<T> Patch for Accumulator<T>
 /// where
 ///     T: Clone,
@@ -79,7 +88,7 @@ pub use patchable_macro::{Patch, Patchable};
 /// assert_eq!(accumulator.accumulated, 15u32);
 /// ```
 /// Declares the associated patch type for a structure.
-pub trait Patchable {
+pub trait Patchable: Sized {
     /// The type of patch associated with this structure.
     type Patch: Clone;
 }
@@ -124,6 +133,12 @@ pub trait Patch: Patchable {
 ///
 /// impl Patchable for Config {
 ///     type Patch = ConfigPatch;
+/// }
+///
+/// impl From<Config> for ConfigPatch {
+///     fn from(c: Config) -> Self {
+///         Self { concurrency: c.concurrency }
+///     }
 /// }
 ///
 /// impl TryPatch for Config {
@@ -308,6 +323,12 @@ pub(crate) mod test {
 
     impl Patchable for FallibleStruct {
         type Patch = FalliblePatch;
+    }
+
+    impl From<FallibleStruct> for FalliblePatch {
+        fn from(s: FallibleStruct) -> Self {
+            FalliblePatch(s.value)
+        }
     }
 
     impl TryPatch for FallibleStruct {
