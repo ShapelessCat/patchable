@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-01-27
+
+### Changed
+
+- Renamed core traits: `WithPatch` -> `Patchable`, `Patchable` -> `Patch`
+- Renamed derive macros to match the new trait names (`Patchable`, `Patch`)
+- Updated README, examples, and macro docs to reflect the new naming and behavior
+
 ## [0.4.1] - 2026-01-26
 
 ### Added
