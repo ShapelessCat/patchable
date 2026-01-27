@@ -18,6 +18,7 @@ pub fn derive_patchable(input: TokenStream) -> TokenStream {
         Ok(ctx) => {
             let patch_struct_def = ctx.build_patch_struct();
             let patchable_trait_impl = ctx.build_patchable_trait_impl();
+            let from_struct_impl = ctx.build_from_trait_impl();
 
             quote! {
                 const _: () = {
@@ -25,6 +26,8 @@ pub fn derive_patchable(input: TokenStream) -> TokenStream {
                     #patch_struct_def
                     #[automatically_derived]
                     #patchable_trait_impl
+                    #[automatically_derived]
+                    #from_struct_impl
                 };
             }
             .into()

@@ -42,7 +42,10 @@ pub(crate) struct MacroContext<'a> {
     field_actions: Vec<FieldAction<'a>>,
     /// The name of the generated companion patch struct (e.g., `MyStructPatch`).
     patch_struct_name: Ident,
-    crate_path: TokenStream2,
+    /// Fully qualified path to the `Patchable` trait.
+    patchable_trait: TokenStream2,
+    /// Fully qualified path to the `Patch` trait.
+    patch_trait: TokenStream2,
 }
 
 impl<'a> MacroContext<'a> {
@@ -109,6 +112,8 @@ impl<'a> MacroContext<'a> {
             };
         }
 
+        let crate_path = use_site_crate_path();
+
         Ok(MacroContext {
             struct_name: &input.ident,
             generics: &input.generics,
@@ -116,7 +121,8 @@ impl<'a> MacroContext<'a> {
             preserved_types,
             field_actions,
             patch_struct_name: quote::format_ident!("{}Patch", &input.ident),
-            crate_path: use_site_crate_path(),
+            patchable_trait: quote! { #crate_path :: Patchable },
+            patch_trait: quote! { #crate_path :: Patch },
         })
     }
 
@@ -132,17 +138,17 @@ impl<'a> MacroContext<'a> {
         // same HIR.
         let generic_params = quote! { <#(#patch_generic_params),*> };
 
-        let mut bounds = Vec::new();
+        let mut bounded_types = Vec::new();
+        let patchable_trait = &self.patchable_trait;
         for param in self.generics.type_params() {
             if let Some(TypeUsage::Patchable) = self.preserved_types.get(&param.ident) {
-                let crate_root = &self.crate_path;
-                bounds.push(quote! { #param: #crate_root :: Patchable });
+                bounded_types.push(quote! { #param: #patchable_trait });
             }
         }
-        let where_clause = if bounds.is_empty() {
+        let where_clause = if bounded_types.is_empty() {
             quote! {}
         } else {
-            quote! { where #(#bounds),* }
+            quote! { where #(#bounded_types),* }
         };
 
         let patch_fields = self.generate_patch_fields();
@@ -163,19 +169,44 @@ impl<'a> MacroContext<'a> {
     // ============================================================
 
     pub(crate) fn build_patchable_trait_impl(&self) -> TokenStream2 {
-        let crate_root = &self.crate_path;
-        let fully_qualified_trait = quote! { #crate_root :: Patchable };
+        let patchable_trait = &self.patchable_trait;
         let (impl_generics, type_generics, _) = self.generics.split_for_impl();
-        let where_clause = self.build_bounded_types(&fully_qualified_trait);
+        let where_clause = self.build_bounded_types(patchable_trait);
         let assoc_type_decl = self.build_associate_type_declaration();
 
         let input_struct_name = self.struct_name;
 
         quote! {
-            impl #impl_generics #crate_root :: Patchable
+            impl #impl_generics #patchable_trait
                 for #input_struct_name #type_generics
             #where_clause {
                 #assoc_type_decl
+            }
+        }
+    }
+
+    // ======================================================================
+    // impl<T, ...> From<OriginalStruct<T, ...>> for OriginalStructPatch<...>
+    // ======================================================================
+
+    pub(crate) fn build_from_trait_impl(&self) -> TokenStream2 {
+        let (impl_generics, type_generics, _) = self.generics.split_for_impl();
+        let patch_generic_params = self.collect_patch_generics();
+        let patch_type_generics = quote! { <#(#patch_generic_params),*> };
+        let where_clause = self.build_from_where_clause();
+
+        let input_struct_name = self.struct_name;
+        let patch_struct_name = &self.patch_struct_name;
+        let from_body = self.generate_from_body();
+
+        quote! {
+            impl #impl_generics ::core::convert::From<#input_struct_name #type_generics>
+                for #patch_struct_name #patch_type_generics
+            #where_clause {
+                #[inline(always)]
+                fn from(value: #input_struct_name #type_generics) -> Self {
+                    #from_body
+                }
             }
         }
     }
@@ -185,10 +216,9 @@ impl<'a> MacroContext<'a> {
     // ============================================================
 
     pub(crate) fn build_patch_trait_impl(&self) -> TokenStream2 {
-        let crate_root = &self.crate_path;
-        let fully_qualified_trait = quote! { #crate_root :: Patch };
+        let patch_trait = &self.patch_trait;
         let (impl_generics, type_generics, _) = self.generics.split_for_impl();
-        let where_clause = self.build_bounded_types(&fully_qualified_trait);
+        let where_clause = self.build_bounded_types(patch_trait);
 
         let input_struct_name = self.struct_name;
 
@@ -200,7 +230,7 @@ impl<'a> MacroContext<'a> {
 
         let patch_method_body = self.generate_patch_method_body();
         quote! {
-            impl #impl_generics #fully_qualified_trait
+            impl #impl_generics #patch_trait
                 for #input_struct_name #type_generics
             #where_clause {
                 #[inline(always)]
@@ -266,6 +296,30 @@ impl<'a> MacroContext<'a> {
         }
     }
 
+    fn generate_from_body(&self) -> TokenStream2 {
+        let field_expressions = self.field_actions.iter().map(|action| {
+            let (member, expr) = match action {
+                FieldAction::Keep { member, .. } => (member, quote! { value.#member }),
+                FieldAction::Patch { member, .. } => (
+                    member,
+                    quote! { ::core::convert::From::from(value.#member) },
+                ),
+            };
+
+            match &self.fields {
+                Fields::Named(_) => quote! { #member: #expr },
+                Fields::Unnamed(_) => quote! { #expr },
+                Fields::Unit => quote! {},
+            }
+        });
+
+        match &self.fields {
+            Fields::Named(_) => quote! { Self { #(#field_expressions),* } },
+            Fields::Unnamed(_) => quote! { Self( #(#field_expressions),* ) },
+            Fields::Unit => quote! { Self },
+        }
+    }
+
     fn collect_patch_generics(&self) -> Vec<Ident> {
         let mut generics = Vec::new();
         for param in self.generics.type_params() {
@@ -325,6 +379,42 @@ impl<'a> MacroContext<'a> {
         let state_name = &self.patch_struct_name;
         quote! {
             type Patch = #state_name <#(#args),*>;
+        }
+    }
+
+    fn build_from_where_clause(&self) -> TokenStream2 {
+        let patchable_trait = &self.patchable_trait;
+        let mut bounded_types = Vec::new();
+        for param in self.generics.type_params() {
+            let t = &param.ident;
+            if let Some(TypeUsage::Patchable) = self.preserved_types.get(t) {
+                bounded_types.push(quote! { #t: #patchable_trait });
+                bounded_types.push(quote! {
+                    <#t as #patchable_trait>::Patch: ::core::convert::From<#t>
+                });
+            }
+        }
+
+        if let Some(where_clause) = &self.generics.where_clause {
+            if bounded_types.is_empty() {
+                return quote! { #where_clause };
+            }
+
+            let normalized_input_where_clause = if where_clause.predicates.empty_or_trailing() {
+                quote! { #where_clause }
+            } else {
+                quote! { #where_clause, }
+            };
+            quote! {
+                #normalized_input_where_clause
+                #(#bounded_types),*
+            }
+        } else if !bounded_types.is_empty() {
+            quote! {
+                where #(#bounded_types),*
+            }
+        } else {
+            quote! {}
         }
     }
 }
