@@ -237,6 +237,35 @@ pub(crate) mod test {
     }
 
     #[derive(Clone, Debug, Serialize, Patchable, Patch, PartialEq)]
+    struct Inner {
+        value: i32,
+    }
+
+    #[derive(Clone, Debug, Serialize, Patchable, Patch, PartialEq)]
+    struct Outer<InnerType> {
+        #[patchable]
+        inner: InnerType,
+        extra: u32,
+    }
+
+    #[test]
+    fn test_from_struct_to_patch() {
+        let original = Outer {
+            inner: Inner { value: 42 },
+            extra: 7,
+        };
+
+        let patch: <Outer<Inner> as Patchable>::Patch = original.clone().into();
+        let mut target = Outer {
+            inner: Inner { value: 0 },
+            extra: 0,
+        };
+
+        target.patch(patch);
+        assert_eq!(target, original);
+    }
+
+    #[derive(Clone, Debug, Serialize, Patchable, Patch, PartialEq)]
     struct TupleStruct(i32, u32);
 
     #[test]
