@@ -169,7 +169,7 @@ pub(crate) mod test {
     use serde::{Deserialize, Serialize};
 
     #[derive(Clone, Default, Debug, Serialize, Patchable)]
-    pub struct FakeMeasurement<T, ClosureType> {
+    struct FakeMeasurement<T, ClosureType> {
         v: T,
         #[allow(dead_code)]
         #[serde(skip)]
@@ -177,10 +177,10 @@ pub(crate) mod test {
     }
 
     #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
-    pub struct MeasurementResult<T>(pub T);
+    struct MeasurementResult<T>(pub T);
 
     #[derive(Clone, Debug, Serialize, Patchable, PartialEq)]
-    pub struct ScopedMeasurement<ScopeType, MeasurementType, MeasurementOutput> {
+    struct ScopedMeasurement<ScopeType, MeasurementType, MeasurementOutput> {
         current_control_level: ScopeType,
         #[patchable]
         inner: MeasurementType,
