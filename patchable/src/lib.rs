@@ -249,6 +249,32 @@ pub(crate) mod test {
         assert_eq!(s, UnitStruct);
     }
 
+    #[derive(Clone, Debug, Serialize, Deserialize, Patchable, PartialEq)]
+    struct Wrapper<T> {
+        value: T,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize, Patchable, PartialEq)]
+    struct Holder<T> {
+        #[patchable]
+        inner: Wrapper<T>,
+    }
+
+    #[test]
+    fn test_patchable_generic_field_type() -> anyhow::Result<()> {
+        let holder = Holder {
+            inner: Wrapper { value: 7u32 },
+        };
+        let mut target = holder.clone();
+
+        let state: String = serde_json::to_string(&holder)?;
+        let patch = serde_json::from_str(&state)?;
+
+        target.patch(patch);
+        assert_eq!(target, holder);
+        Ok(())
+    }
+
     #[derive(Debug, PartialEq)]
     struct FallibleStruct {
         value: i32,
