@@ -53,7 +53,7 @@ impl<'a> MacroContext<'a> {
         let Data::Struct(DataStruct { fields, .. }) = &input.data else {
             return Err(syn::Error::new_spanned(
                 input,
-                "This derive macro can only be applied on structs",
+                "This derive macro can only be applied to structs",
             ));
         };
 
@@ -87,7 +87,7 @@ impl<'a> MacroContext<'a> {
                 let Some(type_name) = get_abstract_simple_type_name(field_type) else {
                     return Err(syn::Error::new_spanned(
                         field_type,
-                        "Only a simple generic type can be used", // TODO: remove this limit
+                        "Only a simple generic type is supported here", // TODO: remove this limit
                     ));
                 };
                 // `Patchable` usage overrides `NotPatchable` usage.
@@ -371,7 +371,7 @@ impl<'a> MacroContext<'a> {
 
     fn build_patch_type_generics(&self) -> TokenStream2 {
         let patch_generic_params = self.collect_patch_generics();
-        // Empty `<>` is legal in Rust, and add or drop the `<>` doesn't affect the
+        // Empty `<>` is legal in Rust, and adding or dropping the `<>` doesn't affect the
         // definition. For example, `struct A<>(i32)` and `struct A(i32)` have the
         // same HIR.
         quote! { <#(#patch_generic_params),*> }
@@ -436,7 +436,7 @@ enum FieldAction<'a> {
 
 fn use_site_crate_path() -> TokenStream2 {
     let found_crate =
-        crate_name("patchable").expect("patchable library should present in `Cargo.toml`");
+        crate_name("patchable").expect("patchable library should be present in `Cargo.toml`");
     match found_crate {
         FoundCrate::Itself => quote! { crate },
         FoundCrate::Name(name) => {
