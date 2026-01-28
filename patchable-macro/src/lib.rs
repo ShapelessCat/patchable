@@ -2,7 +2,7 @@
 //!
 //! Procedural macros for the `patchable` crate: `Patchable` and `Patch` derives.
 //!
-//! See `context` for details on the generated patch struct and trait implementations.
+//! See `context` for details about the generated patch struct and trait implementations.
 
 use proc_macro::TokenStream;
 

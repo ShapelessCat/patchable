@@ -4,18 +4,18 @@
 //!
 //! This crate provides the [`Patchable`], [`Patch`], and [`TryPatch`] traits, along with
 //! derive macros [`patchable_macro::Patchable`] and [`patchable_macro::Patch`] for easy
-//! implementation.
+//! derivation.
 //!
 //! ## Motivation
 //!
 //! Many systems receive incremental updates where only a subset of fields change or can be
-//! considered as parts of state. This crate formalizes this pattern by defining a patch type for a
+//! considered part of the state. This crate formalizes this pattern by defining a patch type for a
 //! structure and providing a consistent way to apply such patches safely.
 
-// Re-export the procedural macro
+// Re-export the derive macros.
 pub use patchable_macro::{Patch, Patchable};
 
-/// A data structure that can be updated using a corresponding patch.
+/// A type that declares a companion patch type.
 ///
 /// ## Usage
 ///
@@ -32,10 +32,10 @@ pub use patchable_macro::{Patch, Patchable};
 /// }
 ///
 /// //vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-/// // If we derive `Patchable` and `Patch` for `Accumulator`, the following `AccumulatorPatch`
-/// // plus `Patchable`/`Patch` implementations can be generated automatically.
+/// // If we derive `Patchable` and `Patch` for `Accumulator`, the following `AccumulatorPatch` type
+/// // and the `Patchable`/`Patch` implementations can be generated automatically.
 /// //
-/// // When deriving `Patchable`, the `From<Accumulator>` implementation is also generated when the
+/// // When deriving `Patchable`, a `From<Accumulator>` implementation is generated if the
 /// // `impl_from` feature is enabled.
 ///
 /// #[derive(Clone, Deserialize)]
@@ -90,13 +90,13 @@ pub use patchable_macro::{Patch, Patchable};
 /// assert_eq!(accumulator.prev_control_signal, 6i32);
 /// assert_eq!(accumulator.accumulated, 15u32);
 /// ```
-/// Declares the associated patch type for a structure.
+/// Declares the associated patch type.
 pub trait Patchable: Sized {
     /// The type of patch associated with this structure.
     type Patch: Clone;
 }
 
-/// A data structure that can be updated using a corresponding patch.
+/// A type that can be updated using its companion patch.
 pub trait Patch: Patchable {
     /// Applies the given patch to update the structure.
     fn patch(&mut self, patch: Self::Patch);
@@ -104,8 +104,8 @@ pub trait Patch: Patchable {
 
 /// A fallible variant of [`Patch`].
 ///
-/// This trait allows applying a patch with validation, returning a custom error
-/// if the patch cannot be applied.
+/// This trait lets you apply a patch with validation and return a custom error
+/// if it cannot be applied.
 ///
 /// ## Usage
 ///
@@ -244,11 +244,11 @@ pub(crate) mod test {
     fn test_try_patch_blanket_impl() {
         let mut s = SimpleStruct { val: 10 };
         // The derived patch struct is compatible with serde.
-        // We use from_str to create the patch.
+        // We use from_str to create the patch value.
         let patch: <SimpleStruct as Patchable>::Patch =
             serde_json::from_str(r#"{"val": 20}"#).unwrap();
 
-        // Should always succeed for `Patch` types due to blanket impl
+        // Should always succeed for `Patch` types due to the blanket impl.
         let result = s.try_patch(patch);
         assert!(result.is_ok());
         assert_eq!(s.val, 20);
