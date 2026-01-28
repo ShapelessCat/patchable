@@ -308,6 +308,26 @@ pub(crate) mod test {
         assert_eq!(s, UnitStruct);
     }
 
+    #[derive(Clone, Debug, Serialize, Patchable, Patch, PartialEq)]
+    struct SkipSerializingStruct {
+        #[serde(skip_serializing)]
+        skipped: i32,
+        value: i32,
+    }
+
+    #[test]
+    fn test_skip_serializing_field_is_excluded() {
+        let mut s = SkipSerializingStruct {
+            skipped: 5,
+            value: 10,
+        };
+        let patch: <SkipSerializingStruct as Patchable>::Patch =
+            serde_json::from_str(r#"{"value": 42}"#).unwrap();
+        s.patch(patch);
+        assert_eq!(s.skipped, 5);
+        assert_eq!(s.value, 42);
+    }
+
     #[derive(Debug, PartialEq)]
     struct FallibleStruct {
         value: i32,
