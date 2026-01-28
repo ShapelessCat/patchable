@@ -62,14 +62,14 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-patchable = "0.5.0" # You can use the latest version
+patchable = "0.5.1" # You can use the latest version
 ```
 
 Enable `From<Struct>` generation:
 
 ```toml
 [dependencies]
-patchable = { version = "0.5.0", features = ["impl_from"] }
+patchable = { version = "0.5.1", features = ["impl_from"] }
 ```
 
 ## Usage
