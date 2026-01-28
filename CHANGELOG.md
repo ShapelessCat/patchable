@@ -5,11 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.1] - 2026-01-28
 
 ### Added
 
-- `impl_from` feature to enable deriving `From<Struct>` for `StructPatch`
+- Added Cargo feature `impl_from` to automatically implement `From<Struct>` for its patch type
+  `StructPatch` when using `#[derive(Patchable)]`.
+
+### Changed
+
+- `Patchable` now requires `Sized`, so it is no longer Dyn-compatible
 
 ## [0.5.0] - 2026-01-27
 
@@ -56,6 +61,7 @@ Early development, and you shouldn't use these versions for your projects.
 - Automatic patch type generation
 - Basic field patching functionality
 
-[Unreleased]: https://github.com/ShapelessCat/patchable/compare/v0.4.1...HEAD
+[0.5.1]: https://github.com/ShapelessCat/patchable/releases/tag/v0.5.1
+[0.5.0]: https://github.com/ShapelessCat/patchable/releases/tag/v0.5.0
 [0.4.1]: https://github.com/ShapelessCat/patchable/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ShapelessCat/patchable/releases/tag/v0.4.0
