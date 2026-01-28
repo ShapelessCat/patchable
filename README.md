@@ -6,47 +6,29 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-A Rust library for automatically deriving patch types and implementing efficient updates from patches for target types.
+A Rust library for deriving patch types and applying patches efficiently to update target types.
 
-This project provides:
+Patchable gives each struct a companion patch type plus trait implementations for applying partial
+updates. It focuses on compact patch representations and efficient updates.
 
-- A `Patchable` trait for declaring patch types.
-- A `Patch` trait for applying partial updates.
-- A `TryPatch` trait as a fallible version of `Patch`.
-- Derive macros that generate companion patch types (`Patchable`) and infallible patch logic (`Patch`).
-
-This enables efficient partial updates of struct instances by applying patches, which is particularly useful for:
-
-- State management in event-driven systems.
-- Incremental updates in streaming applications.
-- Serialization/deserialization of state changes.
-
-Note: patch types intentionally do not derive `Serialize`; patches should be created from their companion structs. The
-"serialization" item above refers to serializing a `Patchable` type to produce its companion patch type instance.
+Note:
+Each struct has one companion patch struct, and each patch struct corresponds to one struct.
 
 ## Why Patchable?
 
 Patchable shines when you need to persist and update state without hand-maintaining
-parallel "state" structs. A common example is durable execution: save only true
+parallel state structs. A common use case is durable execution: save only true
 state while skipping non-state fields (caches, handles, closures), then restore
 or update state incrementally.
 
-The provided derive macros handle the heavy lifting:
+Typical scenarios include:
 
-1. **Patch Type Definition**: For a given a struct definition, `#[derive(Patchable)]` provides
-   fine-grained control over what becomes part of its companion patch:
+- Durable or event-sourced systems where only state fields should be persisted.
+- Streaming or real-time pipelines that receive incremental updates.
+- Syncing or transporting partial state over the network.
 
-   - Exclude **non-state fields**.
-   - Include **simple fields** directly.
-   - Include **complex fields**, which have their own patch types, indirectly by including their patches.
-
-   When `#[derive(Patchable)]` is used, a `From<Struct>` for `StructPatch` can be generated
-   by enabling the `impl_from` feature.
-
-2. **Correct Patch Behavior**: The macro generates `Patch` implementations and
-   correct `patch` methods based on the rules in item 1.
-
-3. **Deserializable Patches**: Patches can be decoded for storage or transport.
+The provided derive macros handle the heavy lifting; they generate companion patch types and patch
+logic. See Features and How It Works for details.
 
 ## Table of Contents
 
@@ -65,20 +47,12 @@ The provided derive macros handle the heavy lifting:
 ## Features
 
 - **Automatic Patch Type Generation**: Derives a companion `Patch` struct for any struct annotated with `#[derive(Patchable)]`
-- **Recursive Patching**: Use `#[patchable]` attribute to mark fields that require recursive patching
-- **Smart Exclusion**: Respects `#[serde(skip)]` and `#[serde(skip_serializing)]`, and `PhantomData` to keep patches lean.
+- **Recursive Patching**: Use the `#[patchable]` attribute to mark fields that require recursive patching
+- **Smart Exclusion**: Respects `#[serde(skip)]` and `#[serde(skip_serializing)]`
 - **Serde Integration**: Generated patch types automatically implement `serde::Deserialize` and `Clone`
 - **Generic Support**: Full support for generic types with automatic trait bound inference
 - **Optional `From` Derive**: Enable `From<Struct>` for `StructPatch` with the `impl_from` feature
 - **Zero Runtime Overhead**: All code generation happens at compile time
-
-## Use Cases
-
-Patchable is a good fit when you want to update state without hand-maintaining parallel structs, such as:
-
-- Event-sourced or durable systems where only state fields should be persisted.
-- Streaming or real-time pipelines that receive incremental updates.
-- Syncing or transporting partial state over the network.
 
 ## Installation
 
@@ -122,14 +96,14 @@ fn main() {
 
     // Serialize the current state
     let state_json = serde_json::to_string(&user).unwrap();
-    
+
     // Deserialize into a patch
     let patch: UserPatch = serde_json::from_str(&state_json).unwrap();
-    
+
     let mut default = User::default();
     // Apply the patch
-    default.patch(patch); 
-    
+    default.patch(patch);
+
     assert_eq!(default, user);
 }
 ```
@@ -177,9 +151,9 @@ struct Wrapper<T, Closure> {
 
 The macros automatically:
 
-- Preserves only the generic parameters used in non-skipped fields
-- Adds appropriate trait bounds (`Clone`, `Patchable`, `Patch`) based on field usage
-- Generates correctly parameterized patch types
+- Preserve only the generic parameters used by non-skipped fields
+- Add appropriate trait bounds (`Clone`, `Patchable`, `Patch`) based on field usage
+- Generate correctly parameterized patch types
 
 ### Fallible Patching
 
@@ -235,20 +209,21 @@ impl TryPatch for Config {
 
 ## How It Works
 
-When you derive `Patchable` on a struct:
+When you derive `Patchable` on a struct, for instance, `Struct`:
 
-1. **Patch Type Generation**: A companion struct named `{StructName}Patch` is generated
-   - Fields marked with `#[patchable]` use their own patch types (`T::Patch`)
-   - Other fields are copied directly with their original types
-   - Fields with `#[serde(skip)]`, `#[serde(skip_serializing)]` or `PhantomData` are excluded
+1. **Companion Patch Type**: The macro generates `StructPatch`, which mirrors the original
+   structure but only includes fields that are part of the patch. Here are the rules:
+   - Each field marked with `#[patchable]` in `Struct` are typed with
+     `<FieldType as Patchable>::Patch` in `StructPatch`.
+   - Each field marked with `#[serde(skip)]` or `#[serde(skip_serializing)]` are excluded.
+   - The left fields are copied directly with their original types.
 
-2. **Trait Implementation**: The `Patchable` trait is implemented:
+2. **Trait Implementation**: The macro implements `Patchable` for `Struct` and sets
+   `type Patch = StructPatch` (see the API reference for the exact trait definition).
 
-   ```rust
-   pub trait Patchable {
-       type Patch: Clone;
-   }
-   ```
+3. **Serialized State to Patch**: If you serialize a `Struct` instance, that serialized value can
+   be deserialized into `<Struct as Patchable>::Patch`, which yields a patch representing the
+   serialized state.
 
 When you derive `Patch` on a struct:
 
@@ -256,13 +231,8 @@ When you derive `Patch` on a struct:
    - Regular fields are directly assigned from the patch
    - `#[patchable]` fields are recursively patched via their own `patch` method
 
-2. **Trait Implementation**: The `Patch` trait is implemented:
-
-   ```rust
-   pub trait Patch: Patchable {
-       fn patch(&mut self, patch: Self::Patch);
-   }
-   ```
+2. **Trait Implementation**: The macro generates `Patch` implementation for the target struct (see
+API reference for the exact trait definitions).
 
 ## API Reference
 
@@ -304,8 +274,8 @@ pub trait Patchable {
 }
 ```
 
-- `Patch`: The associated patch type (automatically generated as `{StructName}Patch` if `#[derive(Patchable)]` is
-  applied)
+- `Patch`: The associated patch type (automatically generated as `{StructName}Patch` when `#[derive(Patchable)]`
+  is applied)
 
 ### `Patch` Trait
 
