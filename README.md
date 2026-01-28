@@ -40,7 +40,8 @@ The provided derive macros handle the heavy lifting:
    - Include **simple fields** directly.
    - Include **complex fields**, which have their own patch types, indirectly by including their patches.
 
-   When `#[derive(Patchable)]` is used, a `From<Struct>` for `StructPatch` will be generated, too.
+   When `#[derive(Patchable)]` is used, a `From<Struct>` for `StructPatch` can be generated
+   by enabling the `impl_from` feature.
 
 2. **Correct Patch Behavior**: The macro generates `Patch` implementations and
    correct `patch` methods based on the rules in item 1.
@@ -68,6 +69,7 @@ The provided derive macros handle the heavy lifting:
 - **Smart Exclusion**: Respects `#[serde(skip)]` and `#[serde(skip_serializing)]`, and `PhantomData` to keep patches lean.
 - **Serde Integration**: Generated patch types automatically implement `serde::Deserialize` and `Clone`
 - **Generic Support**: Full support for generic types with automatic trait bound inference
+- **Optional `From` Derive**: Enable `From<Struct>` for `StructPatch` with the `impl_from` feature
 - **Zero Runtime Overhead**: All code generation happens at compile time
 
 ## Use Cases
@@ -87,6 +89,13 @@ Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
 patchable = "0.5.0" # You can use the latest version
+```
+
+Enable `From<Struct>` generation:
+
+```toml
+[dependencies]
+patchable = { version = "0.5.0", features = ["impl_from"] }
 ```
 
 ## Usage
