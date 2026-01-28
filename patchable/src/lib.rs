@@ -34,6 +34,9 @@ pub use patchable_macro::{Patch, Patchable};
 /// //vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 /// // If we derive `Patchable` and `Patch` for `Accumulator`, the following `AccumulatorPatch`
 /// // plus `Patchable`/`Patch` implementations can be generated automatically.
+/// //
+/// // When deriving `Patchable`, the `From<Accumulator>` implementation is also generated when the
+/// // `impl_from` feature is enabled.
 ///
 /// #[derive(Clone, Deserialize)]
 /// pub struct AccumulatorPatch<T> {
@@ -251,11 +254,13 @@ pub(crate) mod test {
         assert_eq!(s.val, 20);
     }
 
+    #[allow(dead_code)]
     #[derive(Clone, Debug, Serialize, Patchable, Patch, PartialEq)]
     struct Inner {
         value: i32,
     }
 
+    #[allow(dead_code)]
     #[derive(Clone, Debug, Serialize, Patchable, Patch, PartialEq)]
     struct Outer<InnerType> {
         #[patchable]
@@ -263,6 +268,7 @@ pub(crate) mod test {
         extra: u32,
     }
 
+    #[cfg(feature = "impl_from")]
     #[test]
     fn test_from_struct_to_patch() {
         let original = Outer {

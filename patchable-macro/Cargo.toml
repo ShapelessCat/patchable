@@ -13,6 +13,9 @@ readme.workspace = true
 [lib]
 proc-macro = true
 
+[features]
+impl_from = []
+
 [dependencies]
 proc-macro2.workspace = true
 proc-macro-crate.workspace = true
