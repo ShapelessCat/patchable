@@ -36,6 +36,7 @@ logic. See Features and How It Works for details.
 - [Installation](#installation)
 - [Usage](#usage)
   - [Basic Example](#basic-example)
+  - [Using `#[patchable_model]`](#using-patchable_model)
   - [Skipping Fields](#skipping-fields)
   - [Nested Patchable Structs](#nested-patchable-structs)
   - [Fallible Patching](#fallible-patching)
@@ -48,10 +49,11 @@ logic. See Features and How It Works for details.
 
 - **Automatic Patch Type Generation**: Derives a companion `Patch` struct for any struct annotated with `#[derive(Patchable)]`
 - **Recursive Patching**: Use the `#[patchable]` attribute to mark fields that require recursive patching
-- **Smart Exclusion**: Respects `#[serde(skip)]` and `#[serde(skip_serializing)]`
-- **Serde Integration**: Generated patch types automatically implement `serde::Deserialize` and `Clone`
+- **Smart Exclusion**: Excludes fields marked with `#[patchable(skip)]`
+- **Serde Integration (default)**: Generated patch types automatically implement `serde::Deserialize` and `Clone`
 - **Generic Support**: Full support for generic types with automatic trait bound inference
 - **Optional `From` Derive**: Enable `From<Struct>` for `StructPatch` with the `impl_from` feature
+- **`#[patchable_model]` Attribute Macro**: Auto-derives `Patchable` and `Patch`, and (with default `serde`) adds `serde::Serialize`
 - **Zero Runtime Overhead**: All code generation happens at compile time
 
 ## Installation
@@ -62,14 +64,21 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-patchable = "0.5.1" # You can use the latest version
+patchable = "0.5.2" # You can use the latest version
+```
+
+The `serde` feature is enabled by default. Disable default features to opt out:
+
+```toml
+[dependencies]
+patchable = { version = "0.5.2", default-features = false }
 ```
 
 Enable `From<Struct>` generation:
 
 ```toml
 [dependencies]
-patchable = { version = "0.5.1", features = ["impl_from"] }
+patchable = { version = "0.5.2", features = ["impl_from"] }
 ```
 
 ## Usage
@@ -80,7 +89,7 @@ patchable = { version = "0.5.1", features = ["impl_from"] }
 use patchable::{Patch, Patchable};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, Patchable, Patch)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Patchable, Patch)]
 struct User {
     id: u64,
     name: String,
@@ -108,23 +117,50 @@ fn main() {
 }
 ```
 
-### Skipping Fields
+### Using `#[patchable_model]`
 
-Fields can be excluded from patching using serde attributes:
+The simplest way to use this library is the attribute macro:
 
 ```rust
-use patchable::{Patch, Patchable};
-use serde::{Deserialize, Serialize};
+use patchable::patchable_model;
 
-#[derive(Clone, Debug, Serialize, Deserialize, Patchable, Patch)]
+#[patchable_model]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct User {
+    id: u64,
+    name: String,
+    #[patchable(skip)]
+    cache_key: String,
+}
+```
+
+`#[patchable_model]` always adds `Patchable` and `Patch` derives. With the default
+`serde` feature enabled, it also adds `serde::Serialize` and injects `#[serde(skip)]`
+for fields marked `#[patchable(skip)]`.
+Add any other derives you need (for example, `Deserialize`) alongside it.
+
+### Skipping Fields
+
+Fields can be excluded from patching using `#[patchable(skip)]`:
+
+```rust
+use patchable::patchable_model;
+use serde::Deserialize;
+
+#[patchable_model]
+#[derive(Clone, Debug, Deserialize)]
 struct Measurement<T, F> {
     value: T,
-    #[serde(skip)]
+    #[patchable(skip)]
     compute_fn: F,
 }
 ```
 
-Fields marked with `#[serde(skip)]` or `#[serde(skip_serializing)]` are automatically excluded from the generated patch type.
+Fields marked with `#[patchable(skip)]` are excluded from the generated patch type. If you use
+`#[patchable_model]` with the default `serde` feature enabled, those fields also receive
+`#[serde(skip)]` so serialized state and patches stay aligned.
+If you derive `Patchable`/`Patch` directly, add `#[serde(skip)]` yourself when you want
+serialization to match patching behavior.
 
 ### Nested Patchable Structs
 
@@ -132,11 +168,12 @@ The macros fully support generic types:
 
 ```rust
 use patchable::{Patch, Patchable};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-#[derive(Clone, Debug, Serialize, Deserialize, Patchable, Patch)]
+#[derive(Clone, Debug, Serialize, Patchable, Patch)]
 struct Container<Closure> {
     #[serde(skip)]
+    #[patchable(skip)]
     computation_logic: Closure, // Not a part of state
     metadata: String,
 }
@@ -215,7 +252,7 @@ When you derive `Patchable` on a struct, for instance, `Struct`:
    structure but only includes fields that are part of the patch. Here are the rules:
    - Each field marked with `#[patchable]` in `Struct` are typed with
      `<FieldType as Patchable>::Patch` in `StructPatch`.
-   - Each field marked with `#[serde(skip)]` or `#[serde(skip_serializing)]` are excluded.
+   - Fields marked with `#[patchable(skip)]` are excluded.
    - The left fields are copied directly with their original types.
 
 2. **Trait Implementation**: The macro implements `Patchable` for `Struct` and sets
@@ -235,6 +272,16 @@ When you derive `Patch` on a struct:
 API reference for the exact trait definitions).
 
 ## API Reference
+
+### `#[patchable_model]`
+
+Attribute macro that injects `Patchable` and `Patch` derives for a struct.
+
+**Behavior:**
+
+- Adds `#[derive(Patchable, Patch)]` to the target struct.
+- With the default `serde` feature enabled, it also derives `serde::Serialize` and
+  applies `#[serde(skip)]` to fields annotated with `#[patchable(skip)]`.
 
 ### `#[derive(Patchable)]`
 
