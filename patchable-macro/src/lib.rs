@@ -29,8 +29,10 @@ pub fn derive_patchable(input: TokenStream) -> TokenStream {
             const _: () = {
                 #[automatically_derived]
                 #patch_struct_def
+
                 #[automatically_derived]
                 #patchable_trait_impl
+
                 #from_struct_impl
             };
         }
