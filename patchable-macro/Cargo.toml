@@ -1,6 +1,6 @@
 [package]
 name = "patchable-macro"
-description = "Derive macros for traits Patchable and Patch in the patchable crate"
+description = "Macro suite for the patchable crate: enables model with #[patchable_model] and automatic trait derives for Patchable and Patch."
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -15,9 +15,10 @@ proc-macro = true
 
 [features]
 impl_from = []
+serde = []
 
 [dependencies]
 proc-macro2.workspace = true
 proc-macro-crate.workspace = true
 quote.workspace = true
-syn = { workspace = true, features = ["visit"] }
+syn = { workspace = true, features = ["full", "visit", "extra-traits"] }

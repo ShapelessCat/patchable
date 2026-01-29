@@ -12,12 +12,15 @@ use std::collections::HashMap;
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{ToTokens, quote};
-use syn::punctuated::Punctuated;
 use syn::visit::Visit;
 use syn::{
     Attribute, Data, DataStruct, DeriveInput, Field, Fields, GenericParam, Generics, Ident, Index,
-    Meta, PathArguments, Token, Type,
+    PathArguments, Type,
 };
+
+pub const IS_SERDE_ENABLED: bool = cfg!(feature = "serde");
+
+static PATCHABLE: &str = "patchable";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum TypeUsage {
@@ -72,7 +75,7 @@ impl<'a> MacroContext<'a> {
         let mut preserved_types: HashMap<&Ident, TypeUsage> = HashMap::new();
         let mut field_actions = vec![];
 
-        let stateful_fields = fields.iter().filter(|f| !has_serde_skip_attr(f));
+        let stateful_fields = fields.iter().filter(|f| !has_patchable_skip_attr(f));
 
         for (index, field) in stateful_fields.enumerate() {
             let member = if let Some(field_name) = field.ident.as_ref() {
@@ -153,8 +156,17 @@ impl<'a> MacroContext<'a> {
             quote! {;},
         );
         let patch_name = &self.patch_struct_name;
+        let derives = if IS_SERDE_ENABLED {
+            quote! {
+                #[derive(::core::clone::Clone, ::core::cmp::PartialEq, ::serde::Deserialize)]
+            }
+        } else {
+            quote! {
+                #[derive(::core::clone::Clone, ::core::cmp::PartialEq)]
+            }
+        };
         quote! {
-            #[derive(::core::clone::Clone, ::core::cmp::PartialEq, ::serde::Deserialize)]
+            #derives
             pub struct #patch_name #body
         }
     }
@@ -434,9 +446,9 @@ enum FieldAction<'a> {
     Patch { member: FieldMember, ty: &'a Type },
 }
 
-fn use_site_crate_path() -> TokenStream2 {
+pub fn use_site_crate_path() -> TokenStream2 {
     let found_crate =
-        crate_name("patchable").expect("patchable library should be present in `Cargo.toml`");
+        crate_name(PATCHABLE).expect("patchable library should be present in `Cargo.toml`");
     match found_crate {
         FoundCrate::Itself => quote! { crate },
         FoundCrate::Name(name) => {
@@ -446,35 +458,33 @@ fn use_site_crate_path() -> TokenStream2 {
     }
 }
 
+#[inline]
+fn is_patchable_attr(attr: &Attribute) -> bool {
+    attr.path().is_ident(PATCHABLE)
+}
+
+fn patchable_attr_has_param(attr: &Attribute, param: &str) -> bool {
+    is_patchable_attr(attr)
+        && attr
+            .parse_nested_meta(|meta| {
+                if meta.path.is_ident(param) {
+                    Ok(())
+                } else {
+                    Err(meta.error("unrecognized `patchable` parameter"))
+                }
+            })
+            .is_ok()
+}
+
 fn has_patchable_attr(field: &Field) -> bool {
+    field.attrs.iter().any(is_patchable_attr)
+}
+
+pub fn has_patchable_skip_attr(field: &Field) -> bool {
     field
         .attrs
         .iter()
-        .any(|attr| attr.path().is_ident("patchable"))
-}
-
-fn has_serde_skip_attr(field: &Field) -> bool {
-    #[inline]
-    fn is_serde(attr: &Attribute) -> bool {
-        attr.path().is_ident("serde")
-    }
-
-    #[inline]
-    fn need_skip(metas: Punctuated<Meta, Token![,]>) -> bool {
-        metas.iter().any(|e| {
-            matches!(
-                e,
-                Meta::Path(p) if p.is_ident("skip") || p.is_ident("skip_serializing")
-            )
-        })
-    }
-
-    field.attrs.iter().any(|attr| {
-        is_serde(attr)
-            && attr
-                .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
-                .is_ok_and(need_skip)
-    })
+        .any(|attr| patchable_attr_has_param(attr, "skip"))
 }
 
 struct SimpleTypeCollector<'a> {

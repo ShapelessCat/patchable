@@ -20,6 +20,8 @@ serde_json.workspace = true
 anyhow.workspace = true
 
 [features]
+default = ["serde"]
+serde = ["patchable-macro/serde"]
 impl_from = ["patchable-macro/impl_from"]
 
 [dev-dependencies]

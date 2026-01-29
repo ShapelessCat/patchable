@@ -3,8 +3,8 @@
 //! A crate for handling partial updates to data structures.
 //!
 //! This crate provides the [`Patchable`], [`Patch`], and [`TryPatch`] traits, along with
-//! derive macros [`patchable_macro::Patchable`] and [`patchable_macro::Patch`] for easy
-//! derivation.
+//! derive macros for `Patchable` and `Patch`, and an attribute macro `patchable_model`
+//! re-exported from `patchable_macro` for easy derivation.
 //!
 //! ## Motivation
 //!
@@ -13,7 +13,7 @@
 //! structure and providing a consistent way to apply such patches safely.
 
 // Re-export the derive macros.
-pub use patchable_macro::{Patch, Patchable};
+pub use patchable_macro::{Patch, Patchable, patchable_model};
 
 /// A type that declares a companion patch type.
 ///
@@ -36,7 +36,8 @@ pub use patchable_macro::{Patch, Patchable};
 /// // and the `Patchable`/`Patch` implementations can be generated automatically.
 /// //
 /// // When deriving `Patchable`, a `From<Accumulator>` implementation is generated if the
-/// // `impl_from` feature is enabled.
+/// // `impl_from` feature is enabled. For derived implementations, mark non-state fields with
+/// // `#[patchable(skip)]` (and add `#[serde(skip)]` as needed when using serde).
 ///
 /// #[derive(Clone, PartialEq, Deserialize)]
 /// pub struct AccumulatorPatch<T> {
@@ -193,20 +194,22 @@ pub(crate) mod test {
     use std::fmt::Debug;
 
     use super::*;
+    use patchable_macro::patchable_model;
     use serde::{Deserialize, Serialize};
 
-    #[derive(Clone, Default, Debug, Serialize, Patchable, Patch)]
+    #[patchable_model]
+    #[derive(Clone, Default, Debug, PartialEq)]
     struct FakeMeasurement<T, ClosureType> {
         v: T,
-        #[allow(dead_code)]
-        #[serde(skip)]
+        #[patchable(skip)]
         how: ClosureType,
     }
 
-    #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+    #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
     struct MeasurementResult<T>(pub T);
 
-    #[derive(Clone, Debug, Serialize, Patchable, Patch)]
+    #[patchable_model]
+    #[derive(Clone, Debug)]
     struct ScopedMeasurement<ScopeType, MeasurementType, MeasurementOutput> {
         current_control_level: ScopeType,
         #[patchable]
@@ -216,26 +219,33 @@ pub(crate) mod test {
 
     #[test]
     fn test_scoped_peek() -> anyhow::Result<()> {
-        let fake_measurement = FakeMeasurement {
+        fn identity(x: &i32) -> i32 {
+            *x
+        }
+
+        let fake_measurement: FakeMeasurement<i32, fn(&i32) -> i32> = FakeMeasurement {
             v: 42,
-            how: |x: &i32| *x,
+            how: identity,
         };
-        let scoped_peek = ScopedMeasurement {
+        let scoped_peek0 = ScopedMeasurement {
             current_control_level: 33u32,
             inner: fake_measurement.clone(),
             current_base: MeasurementResult(20i32),
         };
-        let mut init_scoped_peek = scoped_peek.clone();
-
-        let state: String = serde_json::to_string(&scoped_peek)?;
-        let state_struct_value = serde_json::from_str(&state)?;
-
-        init_scoped_peek.patch(state_struct_value);
-        assert_eq!(state, serde_json::to_string(&init_scoped_peek)?);
+        let mut scoped_peek1 = ScopedMeasurement {
+            current_control_level: 0u32,
+            inner: fake_measurement.clone(),
+            current_base: MeasurementResult(0i32),
+        };
+        let state0 = serde_json::to_string(&scoped_peek0)?;
+        scoped_peek1.patch(serde_json::from_str(&state0)?);
+        let state1 = serde_json::to_string(&scoped_peek0)?;
+        assert!(state0 == state1);
         Ok(())
     }
 
-    #[derive(Clone, Default, Debug, Serialize, Patchable, Patch)]
+    #[patchable_model]
+    #[derive(Clone, Default, Debug)]
     struct SimpleStruct {
         val: i32,
     }
@@ -255,13 +265,15 @@ pub(crate) mod test {
     }
 
     #[allow(dead_code)]
-    #[derive(Clone, Debug, Serialize, Patchable, Patch)]
+    #[patchable_model]
+    #[derive(Clone, Debug, PartialEq)]
     struct Inner {
         value: i32,
     }
 
     #[allow(dead_code)]
-    #[derive(Clone, Debug, Serialize, Patchable, Patch)]
+    #[patchable_model]
+    #[derive(Clone, Debug, PartialEq)]
     struct Outer<InnerType> {
         #[patchable]
         inner: InnerType,
@@ -269,25 +281,26 @@ pub(crate) mod test {
     }
 
     // TODO: Not testing `impl_from` feature. Need fix.
-    // #[cfg(feature = "impl_from")]
-    // #[test]
-    // fn test_from_struct_to_patch() {
-    //     let original = Outer {
-    //         inner: Inner { value: 42 },
-    //         extra: 7,
-    //     };
+    #[cfg(feature = "impl_from")]
+    #[test]
+    fn test_from_struct_to_patch() {
+        let original = Outer {
+            inner: Inner { value: 42 },
+            extra: 7,
+        };
 
-    //     let patch: <Outer<Inner> as Patchable>::Patch = original.clone().into();
-    //     let mut target = Outer {
-    //         inner: Inner { value: 0 },
-    //         extra: 0,
-    //     };
+        let patch: <Outer<Inner> as Patchable>::Patch = original.clone().into();
+        let mut target = Outer {
+            inner: Inner { value: 0 },
+            extra: 0,
+        };
 
-    //     target.patch(patch);
-    //     assert_eq!(target, original);
-    // }
+        target.patch(patch);
+        assert_eq!(target, original);
+    }
 
-    #[derive(Clone, Debug, Serialize, Patchable, Patch, PartialEq, Eq)]
+    #[patchable_model]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     struct TupleStruct(i32, u32);
 
     #[test]
@@ -298,7 +311,8 @@ pub(crate) mod test {
         assert_eq!(s, TupleStruct(10, 20));
     }
 
-    #[derive(Clone, Debug, Serialize, Patchable, Patch, PartialEq, Eq)]
+    #[patchable_model]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     struct UnitStruct;
 
     #[test]
@@ -309,9 +323,10 @@ pub(crate) mod test {
         assert_eq!(s, UnitStruct);
     }
 
-    #[derive(Clone, Debug, Serialize, Patchable, Patch)]
+    #[patchable_model]
+    #[derive(Clone, Debug)]
     struct SkipSerializingStruct {
-        #[serde(skip_serializing)]
+        #[patchable(skip)]
         skipped: i32,
         value: i32,
     }
