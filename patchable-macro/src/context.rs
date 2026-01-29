@@ -154,7 +154,7 @@ impl<'a> MacroContext<'a> {
         );
         let patch_name = &self.patch_struct_name;
         quote! {
-            #[derive(::core::clone::Clone, ::serde::Deserialize)]
+            #[derive(::core::clone::Clone, ::core::cmp::PartialEq, ::serde::Deserialize)]
             pub struct #patch_name #body
         }
     }
