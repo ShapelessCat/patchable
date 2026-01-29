@@ -1,8 +1,22 @@
 //! # Patchable Macro
 //!
-//! Procedural macros for the `patchable` crate: `Patchable` and `Patch` derives.
+//! Procedural macros backing the `patchable` crate.
 //!
-//! See `context` for details about the generated patch struct and trait implementations.
+//! Provided macros:
+//!
+//! - `#[patchable_model]`: injects `Patchable`/`Patch` derives; with the `serde`
+//!   Cargo feature enabled for this macro crate it also adds `serde::Serialize`
+//!   and applies `#[serde(skip)]` to fields marked `#[patchable(skip)]`.
+//!
+//! - `#[derive(Patchable)]`: generates the companion `<Struct>Patch` type and the
+//!   `Patchable` impl; with the `impl_from` Cargo feature it also generates
+//!   `From<Struct>` for the patch type.
+//!
+//! - `#[derive(Patch)]`: generates the `Patch` implementation and recursively
+//!   patches fields annotated with `#[patchable]`.
+//!
+//! Feature flags are evaluated in the `patchable-macro` crate itself. See `context`
+//! for details about the generated patch struct and trait implementations.
 
 use proc_macro::TokenStream;
 
@@ -12,12 +26,79 @@ use syn::{self, DeriveInput};
 
 mod context;
 
+use syn::{Fields, ItemStruct, parse_macro_input, parse_quote};
+
+use crate::context::{IS_SERDE_ENABLED, has_patchable_skip_attr, use_site_crate_path};
+
+const IS_IMPL_FROM_ENABLED: bool = cfg!(feature = "impl_from");
+
+#[proc_macro_attribute]
+/// Attribute macro that augments a struct with Patchable/Patch derives.
+///
+/// - Always adds `#[derive(Patchable, Patch)]`.
+/// - When the `serde` feature is enabled for the macro crate, it also adds
+///   `#[derive(serde::Serialize)]`.
+/// - For fields annotated with `#[patchable(skip)]`, it injects `#[serde(skip)]`
+///   to keep serde output aligned with patching behavior.
+///
+/// This macro preserves the original struct shape and only mutates attributes.
+pub fn patchable_model(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut input = parse_macro_input!(item as ItemStruct);
+    let crate_root = use_site_crate_path();
+
+    // Note: We use parse_quote! to easily generate Attribute types
+    if !IS_SERDE_ENABLED {
+        input.attrs.push(parse_quote! {
+            #[derive(#crate_root::Patchable, #crate_root::Patch)]
+        });
+    } else {
+        input.attrs.push(parse_quote! {
+            #[derive(#crate_root::Patchable, #crate_root::Patch, ::serde::Serialize)]
+        });
+
+        match input.fields {
+            Fields::Named(ref mut fields) => {
+                for field in &mut fields.named {
+                    // Check if this field has the #[patchable(skip)] attribute
+                    if has_patchable_skip_attr(field) {
+                        field.attrs.push(parse_quote! { #[serde(skip)] });
+                    }
+                }
+            }
+            Fields::Unnamed(ref mut fields) => {
+                for field in &mut fields.unnamed {
+                    if has_patchable_skip_attr(field) {
+                        field.attrs.push(parse_quote! { #[serde(skip)] });
+                    }
+                }
+            }
+            Fields::Unit => {}
+        }
+    }
+
+    (quote! { #input }).into()
+}
+
 #[proc_macro_derive(Patchable, attributes(patchable))]
+/// Derive macro that generates the companion `Patch` type and `Patchable` impl.
+///
+/// The generated patch type:
+/// - mirrors the original struct shape (named/tuple/unit),
+/// - includes fields unless marked with `#[patchable(skip)]`,
+/// - implements `Clone` and `PartialEq`,
+/// - also derives `serde::Deserialize` when the `serde` feature is enabled for the
+///   macro crate.
+///
+/// The `Patchable` impl sets `type Patch = <StructName>Patch<...>` and adds
+/// any required generic bounds.
+///
+/// When the `impl_from` feature is enabled for the macro crate, a
+/// `From<Struct>` implementation is also generated for the patch type.
 pub fn derive_patchable(input: TokenStream) -> TokenStream {
     derive_with(input, |ctx| {
         let patch_struct_def = ctx.build_patch_struct();
         let patchable_trait_impl = ctx.build_patchable_trait_impl();
-        let from_struct_impl = cfg!(feature = "impl_from").then(|| {
+        let from_struct_impl = IS_IMPL_FROM_ENABLED.then(|| {
             let from_struct_impl = ctx.build_from_trait_impl();
             quote! {
                 #[automatically_derived]
@@ -40,6 +121,12 @@ pub fn derive_patchable(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_derive(Patch, attributes(patchable))]
+/// Derive macro that generates the `Patch` trait implementation.
+///
+/// The generated `patch` method:
+/// - assigns fields directly by default,
+/// - recursively calls `patch` on fields marked with `#[patchable]`,
+/// - respects `#[patchable(skip)]` by omitting those fields from patching.
 pub fn derive_patch(input: TokenStream) -> TokenStream {
     derive_with(input, |ctx| {
         let patch_trait_impl = ctx.build_patch_trait_impl();
