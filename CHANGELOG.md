@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2026-01-30
+
+### Changed
+
+- Removed `Sized` bound from `Patchable` trait, restoring dynamic dispatch compatibility.
+
+## [0.5.4] - 2026-01-30
+
+### Added
+
+- Added `cloneable` feature (enabled by default) to optionally derive `Clone` for generated patch types.
+
+### Changed
+
+- **Breaking**: Removed the `Clone` bound from the `Patchable::Patch` associated type.
+
 ## [0.5.3] - 2026-01-30
 
 ### Added
@@ -80,6 +96,8 @@ Early development, and you shouldn't use these versions for your projects.
 - Automatic patch type generation
 - Basic field patching functionality
 
+[0.5.5]: https://github.com/ShapelessCat/patchable/releases/tag/v0.5.5
+[0.5.4]: https://github.com/ShapelessCat/patchable/releases/tag/v0.5.4
 [0.5.3]: https://github.com/ShapelessCat/patchable/releases/tag/v0.5.3
 [0.5.2]: https://github.com/ShapelessCat/patchable/releases/tag/v0.5.2
 [0.5.1]: https://github.com/ShapelessCat/patchable/releases/tag/v0.5.1
