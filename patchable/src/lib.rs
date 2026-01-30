@@ -88,7 +88,7 @@ pub use patchable_macro::{Patch, Patchable, patchable_model};
 /// assert_eq!(accumulator.accumulated, 15u32);
 /// ```
 /// Declares the associated patch type.
-pub trait Patchable: Sized {
+pub trait Patchable {
     /// The type of patch associated with this structure.
     type Patch;
 }
