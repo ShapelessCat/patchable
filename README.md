@@ -66,21 +66,21 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-patchable = "0.5.2" # You can use the latest version
+patchable = "0.5.3" # You can use the latest version
 ```
 
 The `serde` feature is enabled by default. Disable default features to opt out:
 
 ```toml
 [dependencies]
-patchable = { version = "0.5.2", default-features = false }
+patchable = { version = "0.5.3", default-features = false }
 ```
 
 Enable `From<Struct>` generation:
 
 ```toml
 [dependencies]
-patchable = { version = "0.5.2", features = ["impl_from"] }
+patchable = { version = "0.5.3", features = ["impl_from"] }
 ```
 
 ## Usage
