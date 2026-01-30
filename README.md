@@ -3,6 +3,8 @@
 [![CI](https://github.com/ShapelessCat/patchable/actions/workflows/ci.yaml/badge.svg)](https://github.com/ShapelessCat/patchable/actions/workflows/ci.yaml)
 [![Crates.io](https://img.shields.io/crates/v/patchable.svg)](https://crates.io/crates/patchable)
 [![Documentation](https://docs.rs/patchable/badge.svg)](https://docs.rs/patchable)
+[![patchable MSRV](https://img.shields.io/crates/msrv/patchable.svg?label=patchable%20msrv&color=lightgray)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
+[![patchable-macro MSRV](https://img.shields.io/crates/msrv/patchable-macro.svg?label=patchable-macro%20msrv&color=lightgray)](https://blog.rust-lang.org/2025/02/20/Rust-1.85.0.html)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
