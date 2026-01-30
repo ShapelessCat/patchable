@@ -52,7 +52,10 @@ logic. See Features and How It Works for details.
 - **Automatic Patch Type Generation**: Derives a companion `Patch` struct for any struct annotated with `#[derive(Patchable)]`
 - **Recursive Patching**: Use the `#[patchable]` attribute to mark fields that require recursive patching
 - **Smart Exclusion**: Excludes fields marked with `#[patchable(skip)]`
-- **Serde Integration (default)**: Generated patch types automatically implement `serde::Deserialize` and `Clone`
+- **Serde Integration (optional, default)**: Generated patch types automatically implement `serde::Deserialize` (exclude
+  the `serde` feature to opt out)
+- **Clone Support (optional, default)**: Generated patch types automatically implement `Clone` (exclude the `cloneable`
+  feature to opt out)
 - **Generic Support**: Full support for generic types with automatic trait bound inference
 - **Optional `From` Derive**: Enable `From<Struct>` for `StructPatch` with the `impl_from` feature
 - **`#[patchable_model]` Attribute Macro**: Auto-derives `Patchable` and `Patch`, and (with default `serde`) adds `serde::Serialize`
@@ -81,6 +84,13 @@ Enable `From<Struct>` generation:
 ```toml
 [dependencies]
 patchable = { version = "0.5.3", features = ["impl_from"] }
+```
+
+Enable `Clone` derivation for patch types:
+
+```toml
+[dependencies]
+patchable = { version = "0.5.3", features = ["cloneable"] }
 ```
 
 ## Usage
@@ -244,7 +254,7 @@ impl TryPatch for Config {
 - Only structs are supported (enums and unions are not).
 - Lifetime parameters are not supported.
 - `#[patchable]` currently only supports simple generic types (not complex types like `Vec<T>`).
-- Generated patch types derive `Clone` and `Deserialize` but not `Serialize` (by design).
+- Generated patch types derive `Deserialize` (default) and `Clone` (optional with `cloneable` feature) but not `Serialize` (by design).
 
 ## How It Works
 
@@ -319,7 +329,7 @@ Marks a field for recursive patching.
 
 ```rust
 pub trait Patchable {
-    type Patch: Clone;
+    type Patch;
 }
 ```
 

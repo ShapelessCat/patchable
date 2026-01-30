@@ -39,16 +39,15 @@ pub use patchable_macro::{Patch, Patchable, patchable_model};
 /// // `impl_from` feature is enabled. For derived implementations, mark non-state fields with
 /// // `#[patchable(skip)]` (and add `#[serde(skip)]` as needed when using serde).
 ///
-/// #[derive(Clone, PartialEq, Deserialize)]
+/// // Derive `Clone` if needed by enabling "cloneable" feature or manually.
+/// // "cloneable" is enabled by default.
+/// #[derive(PartialEq, Deserialize)]
 /// pub struct AccumulatorPatch<T> {
 ///     prev_control_signal: T,
 ///     accumulated: u32,
 /// }
 ///
-/// impl<T> Patchable for Accumulator<T>
-/// where
-///     T: Clone,
-/// {
+/// impl<T> Patchable for Accumulator<T> {
 ///     type Patch = AccumulatorPatch<T>;
 /// }
 ///
@@ -61,10 +60,7 @@ pub use patchable_macro::{Patch, Patchable, patchable_model};
 ///     }
 /// }
 ///
-/// impl<T> Patch for Accumulator<T>
-/// where
-///     T: Clone,
-/// {
+/// impl<T> Patch for Accumulator<T> {
 ///     #[inline(always)]
 ///     fn patch(&mut self, patch: Self::Patch) {
 ///         self.prev_control_signal = patch.prev_control_signal;
