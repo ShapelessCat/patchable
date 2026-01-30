@@ -7,6 +7,7 @@
 //! macro can emit the companion patch struct plus the `Patchable` and `Patch`
 //! trait implementations.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use proc_macro_crate::{FoundCrate, crate_name};
@@ -80,7 +81,7 @@ impl<'a> MacroContext<'a> {
 
         for (index, field) in stateful_fields.enumerate() {
             let member = if let Some(field_name) = field.ident.as_ref() {
-                FieldMember::Named(field_name.clone())
+                FieldMember::Named(Cow::Borrowed(field_name))
             } else {
                 FieldMember::Unnamed(Index::from(index))
             };
@@ -326,11 +327,11 @@ impl<'a> MacroContext<'a> {
         )
     }
 
-    fn collect_patch_generics(&self) -> Vec<Ident> {
+    fn collect_patch_generics(&self) -> Vec<Cow<'_, Ident>> {
         let mut generics = Vec::new();
         for param in self.generics.type_params() {
             if self.preserved_types.contains_key(&param.ident) {
-                generics.push(param.ident.clone());
+                generics.push(Cow::Borrowed(&param.ident));
             }
         }
         generics
@@ -434,12 +435,12 @@ impl<'a> MacroContext<'a> {
     }
 }
 
-enum FieldMember {
-    Named(Ident),
+enum FieldMember<'a> {
+    Named(Cow<'a, Ident>),
     Unnamed(Index),
 }
 
-impl ToTokens for FieldMember {
+impl<'a> ToTokens for FieldMember<'a> {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
         match self {
             FieldMember::Named(ident) => ident.to_tokens(tokens),
@@ -449,8 +450,14 @@ impl ToTokens for FieldMember {
 }
 
 enum FieldAction<'a> {
-    Keep { member: FieldMember, ty: &'a Type },
-    Patch { member: FieldMember, ty: &'a Type },
+    Keep {
+        member: FieldMember<'a>,
+        ty: &'a Type,
+    },
+    Patch {
+        member: FieldMember<'a>,
+        ty: &'a Type,
+    },
 }
 
 pub fn use_site_crate_path() -> TokenStream2 {
