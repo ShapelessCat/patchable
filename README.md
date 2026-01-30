@@ -69,29 +69,10 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-patchable = "0.5.3" # You can use the latest version
+patchable = "0.5.4" # You can use the latest version
 ```
 
-The `serde` feature is enabled by default. Disable default features to opt out:
-
-```toml
-[dependencies]
-patchable = { version = "0.5.3", default-features = false }
-```
-
-Enable `From<Struct>` generation:
-
-```toml
-[dependencies]
-patchable = { version = "0.5.3", features = ["impl_from"] }
-```
-
-Enable `Clone` derivation for patch types:
-
-```toml
-[dependencies]
-patchable = { version = "0.5.3", features = ["cloneable"] }
-```
+Check this project's Cargo feature flags to see what you want to enable or disable.
 
 ## Usage
 
