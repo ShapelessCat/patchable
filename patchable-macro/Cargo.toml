@@ -15,8 +15,9 @@ readme.workspace = true
 proc-macro = true
 
 [features]
-impl_from = []
 serde = []
+cloneable = []
+impl_from = []
 
 [dependencies]
 proc-macro2.workspace = true

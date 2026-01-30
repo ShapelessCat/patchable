@@ -94,7 +94,7 @@ pub use patchable_macro::{Patch, Patchable, patchable_model};
 /// Declares the associated patch type.
 pub trait Patchable: Sized {
     /// The type of patch associated with this structure.
-    type Patch: Clone;
+    type Patch;
 }
 
 /// A type that can be updated using its companion patch.

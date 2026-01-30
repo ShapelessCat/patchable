@@ -19,6 +19,7 @@ use syn::{
 };
 
 pub const IS_SERDE_ENABLED: bool = cfg!(feature = "serde");
+pub const IS_CLONEABLE_ENABLED: bool = cfg!(feature = "cloneable");
 
 static PATCHABLE: &str = "patchable";
 
@@ -156,17 +157,17 @@ impl<'a> MacroContext<'a> {
             quote! {;},
         );
         let patch_name = &self.patch_struct_name;
-        let derives = if IS_SERDE_ENABLED {
-            quote! {
-                #[derive(::core::clone::Clone, ::core::cmp::PartialEq, ::serde::Deserialize)]
-            }
-        } else {
-            quote! {
-                #[derive(::core::clone::Clone, ::core::cmp::PartialEq)]
-            }
-        };
+        let mut derives_list = Vec::with_capacity(3);
+        if IS_CLONEABLE_ENABLED {
+            derives_list.push(quote! { ::core::clone::Clone });
+        }
+        derives_list.push(quote! { ::core::cmp::PartialEq });
+        if IS_SERDE_ENABLED {
+            derives_list.push(quote! { ::serde::Deserialize });
+        }
+
         quote! {
-            #derives
+            #[derive(#(#derives_list),*)]
             pub struct #patch_name #body
         }
     }
@@ -341,10 +342,16 @@ impl<'a> MacroContext<'a> {
             let t = &param.ident;
             match self.preserved_types.get(t) {
                 Some(TypeUsage::Patchable) => {
-                    bounded_types.push(quote! { #t: #bound + ::core::clone::Clone });
+                    if IS_CLONEABLE_ENABLED {
+                        bounded_types.push(quote! { #t: #bound + ::core::clone::Clone });
+                    } else {
+                        bounded_types.push(quote! { #t: #bound });
+                    }
                 }
                 Some(TypeUsage::NotPatchable) => {
-                    bounded_types.push(quote! { #t: ::core::clone::Clone });
+                    if IS_CLONEABLE_ENABLED {
+                        bounded_types.push(quote! { #t: ::core::clone::Clone });
+                    }
                 }
                 None => {}
             }
