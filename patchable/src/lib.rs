@@ -185,6 +185,41 @@ impl<T: Patch> TryPatch for T {
     }
 }
 
+/// Implementation for `Box<T>`
+impl<T: Patchable> Patchable for Box<T> {
+    type Patch = Box<T::Patch>;
+}
+
+impl<T: Patch> Patch for Box<T> {
+    fn patch(&mut self, patch: Self::Patch) {
+        self.as_mut().patch(*patch);
+    }
+}
+
+/// Implementation for `Option<T>`
+impl<T: Patchable> Patchable for Option<T> {
+    type Patch = Option<T::Patch>;
+}
+
+impl<T: Patch> Patch for Option<T> {
+    fn patch(&mut self, patch: Self::Patch) {
+        if let (Some(s), Some(p)) = (self, patch) {
+            s.patch(p);
+        }
+    }
+}
+
+/// Implementation for `Vec<T>` (Full Replacement)
+impl<T> Patchable for Vec<T> {
+    type Patch = Vec<T>;
+}
+
+impl<T> Patch for Vec<T> {
+    fn patch(&mut self, patch: Self::Patch) {
+        *self = patch;
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod test {
     use std::fmt::Debug;
@@ -194,11 +229,15 @@ pub(crate) mod test {
     use serde::{Deserialize, Serialize};
 
     #[patchable_model]
-    #[derive(Clone, Default, Debug, PartialEq)]
+    #[derive(Clone, Default, Debug, PartialEq, Deserialize)]
+    #[serde(bound(
+        serialize = "T: ::serde::Serialize",
+        deserialize = "T: ::serde::Deserialize<'de>"
+    ))]
     struct FakeMeasurement<T, ClosureType> {
         v: T,
         #[patchable(skip)]
-        how: ClosureType,
+        how: Option<ClosureType>,
     }
 
     #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -221,7 +260,7 @@ pub(crate) mod test {
 
         let fake_measurement: FakeMeasurement<i32, fn(&i32) -> i32> = FakeMeasurement {
             v: 42,
-            how: identity,
+            how: Some(identity),
         };
         let scoped_peek0 = ScopedMeasurement {
             current_control_level: 33u32,
@@ -262,7 +301,7 @@ pub(crate) mod test {
 
     #[allow(dead_code)]
     #[patchable_model]
-    #[derive(Clone, Debug, PartialEq)]
+    #[derive(Clone, Debug, PartialEq, Deserialize)]
     struct Inner {
         value: i32,
     }

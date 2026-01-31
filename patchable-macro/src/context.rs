@@ -8,7 +8,7 @@
 //! trait implementations.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::{Span, TokenStream as TokenStream2};
@@ -16,7 +16,7 @@ use quote::{ToTokens, quote};
 use syn::visit::Visit;
 use syn::{
     Attribute, Data, DataStruct, DeriveInput, Field, Fields, GenericParam, Generics, Ident, Index,
-    PathArguments, Type,
+    Type,
 };
 
 pub const IS_SERDE_ENABLED: bool = cfg!(feature = "serde");
@@ -89,14 +89,9 @@ impl<'a> MacroContext<'a> {
             let field_type = &field.ty;
 
             if has_patchable_attr(field) {
-                let Some(type_name) = get_abstract_simple_type_name(field_type) else {
-                    return Err(syn::Error::new_spanned(
-                        field_type,
-                        "Only a simple generic type is supported here", // TODO: remove this limit
-                    ));
-                };
-                // `Patchable` usage overrides `NotPatchable` usage.
-                preserved_types.insert(type_name, TypeUsage::Patchable);
+                for type_name in collect_used_simple_types(field_type) {
+                    preserved_types.insert(type_name, TypeUsage::Patchable);
+                }
 
                 field_actions.push(FieldAction::Patch {
                     member,
@@ -145,6 +140,8 @@ impl<'a> MacroContext<'a> {
                 bounded_types.push(quote! { #param: #patchable_trait });
             }
         }
+
+        self.add_field_bounds(&mut bounded_types);
         let where_clause = if bounded_types.is_empty() {
             quote! {}
         } else {
@@ -269,13 +266,15 @@ impl<'a> MacroContext<'a> {
                     member: FieldMember::Named(name),
                     ty,
                 } => {
-                    quote! { #name : #ty :: Patch }
+                    let patchable_trait = &self.patchable_trait;
+                    quote! { #name : <#ty as #patchable_trait>::Patch }
                 }
                 FieldAction::Patch {
                     member: FieldMember::Unnamed(_),
                     ty,
                 } => {
-                    quote! { #ty :: Patch }
+                    let patchable_trait = &self.patchable_trait;
+                    quote! { <#ty as #patchable_trait>::Patch }
                 }
             })
             .collect()
@@ -357,6 +356,7 @@ impl<'a> MacroContext<'a> {
                 None => {}
             }
         }
+        self.add_field_bounds(&mut bounded_types);
 
         self.extend_where_clause(bounded_types)
     }
@@ -385,6 +385,7 @@ impl<'a> MacroContext<'a> {
                 });
             }
         }
+        self.add_field_bounds(&mut bounded_types);
 
         self.extend_where_clause(bounded_types)
     }
@@ -418,6 +419,36 @@ impl<'a> MacroContext<'a> {
             }
         } else {
             quote! {}
+        }
+    }
+
+    fn add_field_bounds(&self, bounded_types: &mut Vec<TokenStream2>) {
+        let patchable_trait = &self.patchable_trait;
+        let mut seen_patchable_bounds = HashSet::new();
+        for action in &self.field_actions {
+            if let FieldAction::Patch { ty, .. } = action {
+                let key = ty.to_token_stream().to_string();
+                if seen_patchable_bounds.insert(key) {
+                    bounded_types.push(quote! { #ty: #patchable_trait });
+
+                    bounded_types.push(quote! {
+                        <#ty as #patchable_trait>::Patch : ::core::cmp::PartialEq
+                    });
+
+                    if IS_CLONEABLE_ENABLED {
+                        bounded_types.push(quote! {
+                           <#ty as #patchable_trait>::Patch : ::core::clone::Clone
+                        });
+                    }
+
+                    if IS_SERDE_ENABLED {
+                        bounded_types.push(quote! {
+                            for<'patchable_de> <#ty as #patchable_trait>::Patch:
+                                ::serde::Deserialize<'patchable_de>
+                        });
+                    }
+                }
+            }
         }
     }
 
@@ -522,19 +553,4 @@ fn collect_used_simple_types(ty: &Type) -> Vec<&Ident> {
     };
     collector.visit_type(ty);
     collector.used_simple_types
-}
-
-fn get_abstract_simple_type_name(t: &Type) -> Option<&Ident> {
-    match t {
-        Type::Path(tp) if !tp.path.segments.is_empty() => {
-            let last_segment = tp.path.segments.last()?;
-            // Ensure the path segment has no arguments (e.g., it's not `Vec<T>` or `Option<T>`).
-            if matches!(last_segment.arguments, PathArguments::None) {
-                Some(&last_segment.ident)
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
 }
