@@ -213,6 +213,7 @@ pub(crate) mod test {
         current_base: MeasurementResult<MeasurementOutput>,
     }
 
+    #[cfg(feature = "common")]
     #[test]
     fn test_scoped_peek() -> anyhow::Result<()> {
         fn identity(x: &i32) -> i32 {
@@ -246,6 +247,7 @@ pub(crate) mod test {
         val: i32,
     }
 
+    #[cfg(feature = "common")]
     #[test]
     fn test_try_patch_blanket_impl() {
         let mut s = SimpleStruct { val: 10 };
@@ -299,6 +301,7 @@ pub(crate) mod test {
     #[derive(Clone, Debug, PartialEq, Eq)]
     struct TupleStruct(i32, u32);
 
+    #[cfg(feature = "common")]
     #[test]
     fn test_tuple_struct_patch() {
         let mut s = TupleStruct(1, 2);
@@ -311,6 +314,7 @@ pub(crate) mod test {
     #[derive(Clone, Debug, PartialEq, Eq)]
     struct UnitStruct;
 
+    #[cfg(feature = "common")]
     #[test]
     fn test_unit_struct_patch() {
         let mut s = UnitStruct;
@@ -327,6 +331,7 @@ pub(crate) mod test {
         value: i32,
     }
 
+    #[cfg(feature = "common")]
     #[test]
     fn test_skip_serializing_field_is_excluded() {
         let mut s = SkipSerializingStruct {
