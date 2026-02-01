@@ -21,6 +21,7 @@ use syn::{
 
 pub const IS_SERDE_ENABLED: bool = cfg!(feature = "serde");
 pub const IS_CLONEABLE_ENABLED: bool = cfg!(feature = "cloneable");
+pub const IS_IMPL_FROM_ENABLED: bool = cfg!(feature = "impl_from");
 
 static PATCHABLE: &str = "patchable";
 
@@ -180,6 +181,18 @@ impl<'a> MacroContext<'a> {
         let where_clause = self.build_bounded_types(patchable_trait);
         let assoc_type_decl = self.build_associate_type_declaration();
 
+        let into_patch_method = if IS_IMPL_FROM_ENABLED {
+            let body = self.generate_into_patch_body();
+            quote! {
+                #[inline(always)]
+                fn into_patch(self) -> Self::Patch {
+                    #body
+                }
+            }
+        } else {
+            quote! {}
+        };
+
         let input_struct_name = self.struct_name;
 
         quote! {
@@ -187,6 +200,7 @@ impl<'a> MacroContext<'a> {
                 for #input_struct_name #type_generics
             #where_clause {
                 #assoc_type_decl
+                #into_patch_method
             }
         }
     }
@@ -202,7 +216,7 @@ impl<'a> MacroContext<'a> {
 
         let input_struct_name = self.struct_name;
         let patch_struct_name = &self.patch_struct_name;
-        let from_body = self.generate_from_body();
+        let patchable_trait = &self.patchable_trait;
 
         quote! {
             impl #impl_generics ::core::convert::From<#input_struct_name #type_generics>
@@ -210,7 +224,7 @@ impl<'a> MacroContext<'a> {
             #where_clause {
                 #[inline(always)]
                 fn from(value: #input_struct_name #type_generics) -> Self {
-                    #from_body
+                    <#input_struct_name #type_generics as #patchable_trait>::into_patch(value)
                 }
             }
         }
@@ -303,14 +317,11 @@ impl<'a> MacroContext<'a> {
         }
     }
 
-    fn generate_from_body(&self) -> TokenStream2 {
+    fn generate_into_patch_body(&self) -> TokenStream2 {
         let field_expressions = self.field_actions.iter().map(|action| {
             let (member, expr) = match action {
-                FieldAction::Keep { member, .. } => (member, quote! { value.#member }),
-                FieldAction::Patch { member, .. } => (
-                    member,
-                    quote! { ::core::convert::From::from(value.#member) },
-                ),
+                FieldAction::Keep { member, .. } => (member, quote! { self.#member }),
+                FieldAction::Patch { member, .. } => (member, quote! { self.#member.into_patch() }),
             };
 
             self.select_fields(quote! { #member: #expr }, quote! { #expr }, quote! {})
@@ -318,11 +329,12 @@ impl<'a> MacroContext<'a> {
 
         let body = quote! { #(#field_expressions),* };
         let body_ref = &body;
+        let patch_struct_name = &self.patch_struct_name;
 
         self.select_fields(
-            quote! { Self { #body_ref } },
-            quote! { Self(#body_ref) },
-            quote! { Self },
+            quote! { #patch_struct_name { #body_ref } },
+            quote! { #patch_struct_name(#body_ref) },
+            quote! { #patch_struct_name },
         )
     }
 
@@ -378,11 +390,19 @@ impl<'a> MacroContext<'a> {
         let mut bounded_types = Vec::new();
         for param in self.generics.type_params() {
             let t = &param.ident;
-            if let Some(TypeUsage::Patchable) = self.preserved_types.get(t) {
-                bounded_types.push(quote! { #t: #patchable_trait });
-                bounded_types.push(quote! {
-                    <#t as #patchable_trait>::Patch: ::core::convert::From<#t>
-                });
+            match self.preserved_types.get(t) {
+                Some(TypeUsage::Patchable) => {
+                    bounded_types.push(quote! { #t: #patchable_trait });
+                    bounded_types.push(quote! {
+                        <#t as #patchable_trait>::Patch: ::core::convert::From<#t>
+                    });
+                }
+                Some(TypeUsage::NotPatchable) => {
+                    if IS_CLONEABLE_ENABLED {
+                        bounded_types.push(quote! { #t: ::core::clone::Clone });
+                    }
+                }
+                None => {}
             }
         }
         self.add_field_bounds(&mut bounded_types);

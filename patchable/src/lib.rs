@@ -91,6 +91,13 @@ pub use patchable_macro::{Patch, Patchable, patchable_model};
 pub trait Patchable {
     /// The type of patch associated with this structure.
     type Patch;
+
+    /// Consumes the value and returns its patch representation.
+    ///
+    /// This method is enabled by the `impl_from` feature and is used to
+    /// recursively convert types to their patch equivalents.
+    #[cfg(feature = "impl_from")]
+    fn into_patch(self) -> Self::Patch;
 }
 
 /// A type that can be updated using its companion patch.
@@ -188,6 +195,11 @@ impl<T: Patch> TryPatch for T {
 /// Implementation for `Box<T>`
 impl<T: Patchable> Patchable for Box<T> {
     type Patch = Box<T::Patch>;
+
+    #[cfg(feature = "impl_from")]
+    fn into_patch(self) -> Self::Patch {
+        Box::new((*self).into_patch())
+    }
 }
 
 impl<T: Patch> Patch for Box<T> {
@@ -199,6 +211,11 @@ impl<T: Patch> Patch for Box<T> {
 /// Implementation for `Option<T>`
 impl<T: Patchable> Patchable for Option<T> {
     type Patch = Option<T::Patch>;
+
+    #[cfg(feature = "impl_from")]
+    fn into_patch(self) -> Self::Patch {
+        self.map(|val| val.into_patch())
+    }
 }
 
 impl<T: Patch> Patch for Option<T> {
@@ -212,6 +229,11 @@ impl<T: Patch> Patch for Option<T> {
 /// Implementation for `Vec<T>` (Full Replacement)
 impl<T> Patchable for Vec<T> {
     type Patch = Vec<T>;
+
+    #[cfg(feature = "impl_from")]
+    fn into_patch(self) -> Self::Patch {
+        self
+    }
 }
 
 impl<T> Patch for Vec<T> {
@@ -243,8 +265,16 @@ pub(crate) mod test {
     #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
     struct MeasurementResult<T>(pub T);
 
-    #[patchable_model]
-    #[derive(Clone, Debug)]
+    // #[patchable_model]
+    // #[derive(Clone, Debug)]
+    // struct ScopedMeasurement<ScopeType, MeasurementType, MeasurementOutput> {
+    //     current_control_level: ScopeType,
+    //     #[patchable]
+    //     inner: MeasurementType,
+    //     current_base: MeasurementResult<MeasurementOutput>,
+    // }
+
+    #[derive(Clone, Debug, crate::Patchable, crate::Patch, ::serde::Serialize)]
     struct ScopedMeasurement<ScopeType, MeasurementType, MeasurementOutput> {
         current_control_level: ScopeType,
         #[patchable]
@@ -400,6 +430,11 @@ pub(crate) mod test {
 
     impl Patchable for FallibleStruct {
         type Patch = FalliblePatch;
+
+        #[cfg(feature = "impl_from")]
+        fn into_patch(self) -> Self::Patch {
+            self.into()
+        }
     }
 
     impl From<FallibleStruct> for FalliblePatch {
