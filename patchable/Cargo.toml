@@ -30,3 +30,15 @@ impl_from = ["patchable-macro/impl_from"]
 
 [dev-dependencies]
 thiserror.workspace = true
+serde.workspace = true
+
+[[test]]
+name = "basic"
+
+[[test]]
+name = "serde"
+required-features = ["serde"]
+
+[[test]]
+name = "impl_from"
+required-features = ["impl_from"]
