@@ -23,7 +23,7 @@ pub const IS_SERDE_ENABLED: bool = cfg!(feature = "serde");
 
 static PATCHABLE: &str = "patchable";
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug)]
 enum TypeUsage {
     NotPatchable,
     Patchable,
@@ -158,7 +158,6 @@ impl<'a> MacroContext<'a> {
         );
         let patch_name = &self.patch_struct_name;
         let mut derives_list = Vec::with_capacity(3);
-        derives_list.push(quote! { ::core::cmp::PartialEq });
         if IS_SERDE_ENABLED {
             derives_list.push(quote! { ::serde::Deserialize });
         }

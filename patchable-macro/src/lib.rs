@@ -85,7 +85,6 @@ pub fn patchable_model(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// The generated patch type:
 /// - mirrors the original struct shape (named/tuple/unit),
 /// - includes fields unless marked with `#[patchable(skip)]`,
-/// - implements `Clone` and `PartialEq`,
 /// - also derives `serde::Deserialize` when the `serde` feature is enabled for the
 ///   macro crate.
 ///
