@@ -16,7 +16,6 @@ proc-macro = true
 
 [features]
 serde = []
-cloneable = []
 impl_from = []
 
 [dependencies]
