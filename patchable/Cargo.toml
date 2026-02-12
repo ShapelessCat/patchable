@@ -21,8 +21,7 @@ serde_json.workspace = true
 anyhow.workspace = true
 
 [features]
-default = []
-common = ["serde"]
+default = ["serde"]
 full = ["serde", "impl_from"]
 serde = ["patchable-macro/serde"]
 impl_from = ["patchable-macro/impl_from"]
