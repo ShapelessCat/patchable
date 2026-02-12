@@ -22,10 +22,9 @@ anyhow.workspace = true
 
 [features]
 default = []
-common = ["serde", "cloneable"]
-full = ["serde", "cloneable", "impl_from"]
+common = ["serde"]
+full = ["serde", "impl_from"]
 serde = ["patchable-macro/serde"]
-cloneable = ["patchable-macro/cloneable"]
 impl_from = ["patchable-macro/impl_from"]
 
 [dev-dependencies]

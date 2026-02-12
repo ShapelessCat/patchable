@@ -20,11 +20,10 @@ use syn::{
 };
 
 pub const IS_SERDE_ENABLED: bool = cfg!(feature = "serde");
-pub const IS_CLONEABLE_ENABLED: bool = cfg!(feature = "cloneable");
 
 static PATCHABLE: &str = "patchable";
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 enum TypeUsage {
     NotPatchable,
     Patchable,
@@ -131,7 +130,7 @@ impl<'a> MacroContext<'a> {
     }
 
     // ============================================================
-    // #[derive(::core::clone::Clone, ::serde::Deserialize)]
+    // #[derive(::serde::Deserialize)]
     // struct InputTypePatch<T, ...> ...
     // ============================================================
 
@@ -159,9 +158,6 @@ impl<'a> MacroContext<'a> {
         );
         let patch_name = &self.patch_struct_name;
         let mut derives_list = Vec::with_capacity(3);
-        if IS_CLONEABLE_ENABLED {
-            derives_list.push(quote! { ::core::clone::Clone });
-        }
         derives_list.push(quote! { ::core::cmp::PartialEq });
         if IS_SERDE_ENABLED {
             derives_list.push(quote! { ::serde::Deserialize });
@@ -341,20 +337,8 @@ impl<'a> MacroContext<'a> {
         let mut bounded_types = Vec::new();
         for param in self.generics.type_params() {
             let t = &param.ident;
-            match self.preserved_types.get(t) {
-                Some(TypeUsage::Patchable) => {
-                    if IS_CLONEABLE_ENABLED {
-                        bounded_types.push(quote! { #t: #bound + ::core::clone::Clone });
-                    } else {
-                        bounded_types.push(quote! { #t: #bound });
-                    }
-                }
-                Some(TypeUsage::NotPatchable) => {
-                    if IS_CLONEABLE_ENABLED {
-                        bounded_types.push(quote! { #t: ::core::clone::Clone });
-                    }
-                }
-                None => {}
+            if let Some(TypeUsage::Patchable) = self.preserved_types.get(t) {
+                bounded_types.push(quote! { #t: #bound });
             }
         }
 
