@@ -26,8 +26,11 @@ jobs:
       - name: Run clippy
         run: cargo clippy --verbose
 
-      - name: Run tests without feature impl_from
+      - name: Run tests with default features (support serde)
         run: cargo test --verbose --package patchable
+
+      - name: Run tests without default feature
+        run: cargo test --verbose --package patchable --no-default-features
 
       - name: cargo test with feature impl_from
         run: cargo test --verbose --package patchable --features impl_from
