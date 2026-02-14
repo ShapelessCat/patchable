@@ -79,7 +79,7 @@ pub fn patchable_model(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// When the `impl_from` feature is enabled for the macro crate, a
 /// `From<Struct>` implementation is also generated for the patch type.
 pub fn derive_patchable(input: TokenStream) -> TokenStream {
-    derive_with(input, |ctx| {
+    expand(input, |ctx| {
         let patch_struct_def = ctx.build_patch_struct();
         let patchable_trait_impl = ctx.build_patchable_trait_impl();
         let from_struct_impl = IS_IMPL_FROM_ENABLED.then(|| {
@@ -112,7 +112,7 @@ pub fn derive_patchable(input: TokenStream) -> TokenStream {
 /// - recursively calls `patch` on fields marked with `#[patchable]`,
 /// - respects `#[patchable(skip)]` by omitting those fields from patching.
 pub fn derive_patch(input: TokenStream) -> TokenStream {
-    derive_with(input, |ctx| {
+    expand(input, |ctx| {
         let patch_trait_impl = ctx.build_patch_trait_impl();
 
         quote! {
@@ -124,7 +124,7 @@ pub fn derive_patch(input: TokenStream) -> TokenStream {
     })
 }
 
-fn derive_with<F>(input: TokenStream, f: F) -> TokenStream
+fn expand<F>(input: TokenStream, f: F) -> TokenStream
 where
     F: FnOnce(&context::MacroContext) -> TokenStream2,
 {

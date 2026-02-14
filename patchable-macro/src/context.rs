@@ -219,7 +219,7 @@ impl<'a> MacroContext<'a> {
 
         let input_struct_name = self.struct_name;
         let patch_struct_name = &self.patch_struct_name;
-        let from_body = self.generate_from_body();
+        let from_method_body = self.build_from_method_body();
 
         quote! {
             impl #impl_generics ::core::convert::From<#input_struct_name #type_generics>
@@ -227,7 +227,7 @@ impl<'a> MacroContext<'a> {
             #where_clause {
                 #[inline(always)]
                 fn from(value: #input_struct_name #type_generics) -> Self {
-                    #from_body
+                    #from_method_body
                 }
             }
         }
@@ -292,29 +292,27 @@ impl<'a> MacroContext<'a> {
         }
     }
 
-    fn generate_from_body(&self) -> TokenStream2 {
-        let field_expressions = self.field_actions.iter().map(|action| {
-            let (member, expr) = match action {
-                FieldAction::Keep { member, .. } => (member, quote! { value.#member }),
-                FieldAction::Patch { member, .. } => (
-                    member,
-                    quote! { ::core::convert::From::from(value.#member) },
-                ),
-            };
-
-            match &self.fields {
-                Fields::Named(_) => quote! { #member: #expr },
-                Fields::Unnamed(_) => quote! { #expr },
-                Fields::Unit => quote! {},
-            }
-        });
-
-        let body = quote! { #(#field_expressions),* };
-
+    fn build_from_method_body(&self) -> TokenStream2 {
         match &self.fields {
-            Fields::Named(_) => quote! { Self { #body } },
-            Fields::Unnamed(_) => quote! { Self(#body) },
-            Fields::Unit => quote! { Self },
+            Fields::Named(_) => {
+                let field_initializers = self.field_actions.iter().map(|action| {
+                    let member = action.member();
+                    let value = action.build_initializer_expr();
+                    quote! { #member: #value }
+                });
+                quote! { Self { #(#field_initializers),* } }
+            }
+            Fields::Unnamed(_) => {
+                let field_values = self
+                    .field_actions
+                    .iter()
+                    .map(|action| action.build_initializer_expr());
+                quote! { Self(#(#field_values),*) }
+            }
+            Fields::Unit => {
+                debug_assert!(self.field_actions.is_empty());
+                quote! { Self }
+            }
         }
     }
 
@@ -426,6 +424,22 @@ enum FieldAction<'a> {
         member: FieldMember<'a>,
         ty: &'a Type,
     },
+}
+
+impl<'a> FieldAction<'a> {
+    fn member(&self) -> &FieldMember<'a> {
+        match self {
+            FieldAction::Keep { member, .. } | FieldAction::Patch { member, .. } => member,
+        }
+    }
+
+    fn build_initializer_expr(&self) -> TokenStream2 {
+        let member = self.member();
+        match self {
+            FieldAction::Keep { .. } => quote! { value.#member },
+            FieldAction::Patch { .. } => quote! { ::core::convert::From::from(value.#member) },
+        }
+    }
 }
 
 fn patch_member(member: &FieldMember<'_>, patch_index: usize) -> TokenStream2 {
