@@ -138,9 +138,129 @@ fn test_skip_serializing_field_is_excluded() {
         skipped: 5,
         value: 10,
     };
+    let json = serde_json::to_value(&s).unwrap();
+    assert_eq!(json, serde_json::json!({ "value": 10 }));
+
     let patch: <SkipSerializingStruct as Patchable>::Patch =
         serde_json::from_str(r#"{"value": 42}"#).unwrap();
     s.patch(patch);
     assert_eq!(s.skipped, 5);
     assert_eq!(s.value, 42);
+}
+
+#[derive(Clone, Debug, Serialize, patchable::Patchable, patchable::Patch)]
+struct DeriveOnlySkipBehavior {
+    #[patchable(skip)]
+    hidden: i32,
+    shown: i32,
+}
+
+#[test]
+fn test_direct_derive_does_not_add_serde_skip() {
+    let value = DeriveOnlySkipBehavior {
+        hidden: 7,
+        shown: 11,
+    };
+    let json = serde_json::to_value(&value).unwrap();
+    assert_eq!(json, serde_json::json!({ "hidden": 7, "shown": 11 }));
+
+    let patch: <DeriveOnlySkipBehavior as Patchable>::Patch =
+        serde_json::from_str(r#"{"shown": 5}"#).unwrap();
+    let mut target = DeriveOnlySkipBehavior {
+        hidden: 99,
+        shown: 0,
+    };
+    target.patch(patch);
+
+    assert_eq!(target.hidden, 99);
+    assert_eq!(target.shown, 5);
+}
+
+#[patchable_model]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+struct Counter {
+    value: i32,
+}
+
+#[patchable_model]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MixedGenericUsage<T> {
+    history: Vec<T>,
+    #[patchable]
+    current: T,
+}
+
+#[test]
+fn test_mixed_generic_usage_patches_and_replaces() {
+    let mut value = MixedGenericUsage {
+        history: vec![Counter { value: 1 }],
+        current: Counter { value: 2 },
+    };
+    let patch: <MixedGenericUsage<Counter> as Patchable>::Patch =
+        serde_json::from_str(r#"{"history":[{"value":10},{"value":20}],"current":{"value":99}}"#)
+            .unwrap();
+
+    value.patch(patch);
+    assert_eq!(
+        value.history,
+        vec![Counter { value: 10 }, Counter { value: 20 }]
+    );
+    assert_eq!(value.current, Counter { value: 99 });
+}
+
+#[patchable_model]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ExistingWhereTrailing<T, U>
+where
+    U: Default,
+{
+    #[patchable]
+    inner: T,
+    marker: U,
+}
+
+#[test]
+fn test_existing_where_clause_with_trailing_comma() {
+    let mut value = ExistingWhereTrailing {
+        inner: Counter { value: 1 },
+        marker: (),
+    };
+    let patch: <ExistingWhereTrailing<Counter, ()> as Patchable>::Patch =
+        serde_json::from_str(r#"{"inner":{"value":5},"marker":null}"#).unwrap();
+
+    value.patch(patch);
+    assert_eq!(
+        value,
+        ExistingWhereTrailing {
+            inner: Counter { value: 5 },
+            marker: (),
+        }
+    );
+}
+
+#[patchable_model]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ExistingWhereNoTrailing<T>
+where
+    T: Clone,
+{
+    #[patchable]
+    inner: T,
+}
+
+#[test]
+fn test_existing_where_clause_without_trailing_comma() {
+    let mut value = ExistingWhereNoTrailing {
+        inner: Counter { value: 3 },
+    };
+    let patch: <ExistingWhereNoTrailing<Counter> as Patchable>::Patch =
+        serde_json::from_str(r#"{"inner":{"value":8}}"#).unwrap();
+
+    value.patch(patch);
+    assert_eq!(
+        value,
+        ExistingWhereNoTrailing {
+            inner: Counter { value: 8 },
+        }
+    );
 }
