@@ -2,6 +2,10 @@ name: CI
 
 on:
   push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 env:
   CARGO_TERM_COLOR: always
@@ -34,3 +38,155 @@ jobs:
 
       - name: cargo test with feature impl_from
         run: cargo test --verbose --package patchable --features impl_from
+
+  coverage-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: llvm-tools-preview
+          cache-key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Run merged coverage test matrix
+        run: |
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov --workspace --no-default-features --tests --no-report
+          cargo llvm-cov --workspace --tests --no-report
+          cargo llvm-cov --workspace --features impl_from --tests --no-report
+
+      - name: Generate HTML and JSON reports
+        run: |
+          cargo llvm-cov report --html --output-dir target/llvm-cov
+          cargo llvm-cov report --json --summary-only --output-path target/llvm-cov/summary.json
+
+      - name: Capture current line coverage
+        run: |
+          CURRENT_LINE_COVERAGE=$(jq -r '.data[0].totals.lines.percent' target/llvm-cov/summary.json)
+          printf "%s\n" "${CURRENT_LINE_COVERAGE}" > target/llvm-cov/current_line_coverage.txt
+          {
+            echo "## Coverage Report"
+            echo ""
+            echo "Current total line coverage: ${CURRENT_LINE_COVERAGE}%"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload HTML report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: target/llvm-cov/html
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload coverage summary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-summary
+          path: |
+            target/llvm-cov/summary.json
+            target/llvm-cov/current_line_coverage.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  coverage-compare:
+    runs-on: ubuntu-latest
+    needs: coverage-report
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download current coverage summary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-summary
+          path: target/coverage-current
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: llvm-tools-preview
+          cache-key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Compare current coverage against base
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA_PR: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA_PUSH: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            BASE_SHA="${BASE_SHA_PR}"
+          else
+            BASE_SHA="${BASE_SHA_PUSH}"
+          fi
+
+          if [ -z "${BASE_SHA}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+            echo "No valid base SHA available. Skipping coverage comparison."
+            exit 0
+          fi
+
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "Base SHA ${BASE_SHA} not found locally. Fetching remote branch refs..."
+            git fetch --no-tags origin "+refs/heads/*:refs/remotes/origin/*" || true
+          fi
+
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "Base SHA ${BASE_SHA} is unavailable (likely rewritten history). Skipping coverage comparison."
+            exit 0
+          fi
+
+          CURRENT_COVERAGE_FILE=$(find target/coverage-current -name current_line_coverage.txt -print -quit)
+          if [ -z "${CURRENT_COVERAGE_FILE}" ]; then
+            echo "Could not find current_line_coverage.txt in downloaded artifact."
+            exit 1
+          fi
+          CURRENT_LINE_COVERAGE=$(cat "${CURRENT_COVERAGE_FILE}")
+
+          if ! git checkout --force "${BASE_SHA}"; then
+            echo "Checkout of ${BASE_SHA} failed. Trying to fetch commit object directly..."
+            if ! git fetch --no-tags --depth=1 origin "${BASE_SHA}"; then
+              echo "Could not fetch base SHA ${BASE_SHA}. Skipping coverage comparison."
+              exit 0
+            fi
+            git checkout --force "${BASE_SHA}" || {
+              echo "Checkout still failed after fetch. Skipping coverage comparison."
+              exit 0
+            }
+          fi
+
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov --workspace --no-default-features --tests --no-report
+          cargo llvm-cov --workspace --tests --no-report
+          cargo llvm-cov --workspace --features impl_from --tests --no-report
+          mkdir -p target/llvm-cov
+          cargo llvm-cov report --json --summary-only --output-path target/llvm-cov/base-summary.json
+
+          BASE_LINE_COVERAGE=$(jq -r '.data[0].totals.lines.percent' target/llvm-cov/base-summary.json)
+          DELTA=$(awk -v current="${CURRENT_LINE_COVERAGE}" -v base="${BASE_LINE_COVERAGE}" 'BEGIN { printf "%.4f", current - base }')
+
+          {
+            echo "## Coverage Comparison"
+            echo ""
+            echo "Current line coverage: ${CURRENT_LINE_COVERAGE}%"
+            echo "Base line coverage: ${BASE_LINE_COVERAGE}%"
+            echo "Delta: ${DELTA}%"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if awk -v current="${CURRENT_LINE_COVERAGE}" -v base="${BASE_LINE_COVERAGE}" 'BEGIN { exit (current + 1e-9 < base) ? 0 : 1 }'; then
+            echo "Coverage regression detected: current (${CURRENT_LINE_COVERAGE}%) < base (${BASE_LINE_COVERAGE}%)."
+            exit 1
+          fi
+
+          echo "Coverage did not regress."
