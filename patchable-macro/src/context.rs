@@ -153,7 +153,7 @@ impl<'a> MacroContext<'a> {
         let patch_fields = self.generate_patch_fields();
         let body = self.select_fields(
             quote! { #generic_params #where_clause { #(#patch_fields),* } },
-            quote! { #generic_params #where_clause ( #(#patch_fields),* ); },
+            quote! { #generic_params ( #(#patch_fields),* ) #where_clause; },
             quote! {;},
         );
         let patch_name = &self.patch_struct_name;
