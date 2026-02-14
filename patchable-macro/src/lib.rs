@@ -22,11 +22,11 @@ use proc_macro::TokenStream;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{self, DeriveInput};
+use syn::{Fields, ItemStruct, parse_macro_input, parse_quote};
 
 mod context;
 
-use syn::{Fields, ItemStruct, parse_macro_input, parse_quote};
+use syn::DeriveInput;
 
 use crate::context::{IS_SERDE_ENABLED, has_patchable_skip_attr, use_site_crate_path};
 
@@ -46,34 +46,19 @@ pub fn patchable_model(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut input = parse_macro_input!(item as ItemStruct);
     let crate_root = use_site_crate_path();
 
-    // Note: We use parse_quote! to easily generate Attribute types
-    if !IS_SERDE_ENABLED {
-        input.attrs.push(parse_quote! {
-            #[derive(#crate_root::Patchable, #crate_root::Patch)]
-        });
-    } else {
-        input.attrs.push(parse_quote! {
+    let derives = if IS_SERDE_ENABLED {
+        parse_quote! {
             #[derive(#crate_root::Patchable, #crate_root::Patch, ::serde::Serialize)]
-        });
-
-        match input.fields {
-            Fields::Named(ref mut fields) => {
-                for field in &mut fields.named {
-                    // Check if this field has the #[patchable(skip)] attribute
-                    if has_patchable_skip_attr(field) {
-                        field.attrs.push(parse_quote! { #[serde(skip)] });
-                    }
-                }
-            }
-            Fields::Unnamed(ref mut fields) => {
-                for field in &mut fields.unnamed {
-                    if has_patchable_skip_attr(field) {
-                        field.attrs.push(parse_quote! { #[serde(skip)] });
-                    }
-                }
-            }
-            Fields::Unit => {}
         }
+    } else {
+        parse_quote! {
+            #[derive(#crate_root::Patchable, #crate_root::Patch)]
+        }
+    };
+    input.attrs.push(derives);
+
+    if IS_SERDE_ENABLED {
+        add_serde_skip_attrs(&mut input.fields);
     }
 
     (quote! { #input }).into()
@@ -143,9 +128,17 @@ fn derive_with<F>(input: TokenStream, f: F) -> TokenStream
 where
     F: FnOnce(&context::MacroContext) -> TokenStream2,
 {
-    let input: DeriveInput = syn::parse_macro_input!(input as DeriveInput);
+    let input: DeriveInput = parse_macro_input!(input as DeriveInput);
     match context::MacroContext::new(&input) {
         Ok(ctx) => f(&ctx).into(),
         Err(e) => e.to_compile_error().into(),
+    }
+}
+
+fn add_serde_skip_attrs(fields: &mut Fields) {
+    for field in fields.iter_mut() {
+        if has_patchable_skip_attr(field) {
+            field.attrs.push(parse_quote! { #[serde(skip)] });
+        }
     }
 }
