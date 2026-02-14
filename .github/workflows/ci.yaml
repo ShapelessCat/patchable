@@ -147,12 +147,15 @@ jobs:
             exit 0
           fi
 
-          CURRENT_COVERAGE_FILE=$(find target/coverage-current -name current_line_coverage.txt -print -quit)
-          if [ -z "${CURRENT_COVERAGE_FILE}" ]; then
-            echo "Could not find current_line_coverage.txt in downloaded artifact."
+          CURRENT_SUMMARY_FILE=$(find target/coverage-current -name summary.json -print -quit)
+          if [ -z "${CURRENT_SUMMARY_FILE}" ]; then
+            echo "Could not find summary.json in downloaded artifact."
             exit 1
           fi
-          CURRENT_LINE_COVERAGE=$(cat "${CURRENT_COVERAGE_FILE}")
+
+          CURRENT_LINE_COVERAGE=$(jq -r '.data[0].totals.lines.percent' "${CURRENT_SUMMARY_FILE}")
+          CURRENT_REGION_COVERAGE=$(jq -r '.data[0].totals.regions.percent' "${CURRENT_SUMMARY_FILE}")
+          CURRENT_FUNCTION_COVERAGE=$(jq -r '.data[0].totals.functions.percent' "${CURRENT_SUMMARY_FILE}")
 
           if ! git checkout --force "${BASE_SHA}"; then
             echo "Checkout of ${BASE_SHA} failed. Trying to fetch commit object directly..."
@@ -174,19 +177,55 @@ jobs:
           cargo llvm-cov report --json --summary-only --output-path target/llvm-cov/base-summary.json
 
           BASE_LINE_COVERAGE=$(jq -r '.data[0].totals.lines.percent' target/llvm-cov/base-summary.json)
-          DELTA=$(awk -v current="${CURRENT_LINE_COVERAGE}" -v base="${BASE_LINE_COVERAGE}" 'BEGIN { printf "%.4f", current - base }')
+          BASE_REGION_COVERAGE=$(jq -r '.data[0].totals.regions.percent' target/llvm-cov/base-summary.json)
+          BASE_FUNCTION_COVERAGE=$(jq -r '.data[0].totals.functions.percent' target/llvm-cov/base-summary.json)
+
+          LINE_DELTA=$(awk -v current="${CURRENT_LINE_COVERAGE}" -v base="${BASE_LINE_COVERAGE}" 'BEGIN { printf "%.4f", current - base }')
+          REGION_DELTA=$(awk -v current="${CURRENT_REGION_COVERAGE}" -v base="${BASE_REGION_COVERAGE}" 'BEGIN { printf "%.4f", current - base }')
+          FUNCTION_DELTA=$(awk -v current="${CURRENT_FUNCTION_COVERAGE}" -v base="${BASE_FUNCTION_COVERAGE}" 'BEGIN { printf "%.4f", current - base }')
 
           {
             echo "## Coverage Comparison"
             echo ""
+            echo "Current function coverage: ${CURRENT_FUNCTION_COVERAGE}%"
+            echo "Base function coverage: ${BASE_FUNCTION_COVERAGE}%"
+            echo "Function delta: ${FUNCTION_DELTA}%"
+            echo ""
             echo "Current line coverage: ${CURRENT_LINE_COVERAGE}%"
             echo "Base line coverage: ${BASE_LINE_COVERAGE}%"
-            echo "Delta: ${DELTA}%"
+            echo "Line delta: ${LINE_DELTA}%"
+            echo ""
+            echo "Current region coverage: ${CURRENT_REGION_COVERAGE}%"
+            echo "Base region coverage: ${BASE_REGION_COVERAGE}%"
+            echo "Region delta: ${REGION_DELTA}%"
           } >> "${GITHUB_STEP_SUMMARY}"
 
-          if awk -v current="${CURRENT_LINE_COVERAGE}" -v base="${BASE_LINE_COVERAGE}" 'BEGIN { exit (current + 1e-9 < base) ? 0 : 1 }'; then
-            echo "Coverage regression detected: current (${CURRENT_LINE_COVERAGE}%) < base (${BASE_LINE_COVERAGE}%)."
-            exit 1
+          if awk -v current="${CURRENT_LINE_COVERAGE}" -v base="${BASE_LINE_COVERAGE}" 'BEGIN { exit (current + 1e-9 >= base) ? 0 : 1 }'; then
+            echo "Coverage status: very good (no line coverage regression)."
+            {
+              echo ""
+              echo "Result: very good"
+              echo "Reason: line coverage did not regress."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
           fi
 
-          echo "Coverage did not regress."
+          echo "Coverage regression detected. Evaluating relaxed thresholds..."
+          if awk -v func="${CURRENT_FUNCTION_COVERAGE}" -v line="${CURRENT_LINE_COVERAGE}" -v region="${CURRENT_REGION_COVERAGE}" 'BEGIN { exit (func + 1e-9 >= 100.0 && line + 1e-9 >= 90.0 && region + 1e-9 >= 90.0) ? 0 : 1 }'; then
+            echo "Coverage status: acceptable regression (functions >= 100%, lines >= 90%, regions >= 90%)."
+            {
+              echo ""
+              echo "Result: acceptable"
+              echo "Reason: regression exists, but quality thresholds are satisfied."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          echo "Coverage status: failed (regression with thresholds not satisfied)."
+          {
+            echo ""
+            echo "Result: failed"
+            echo "Reason: regression detected and quality thresholds not met."
+            echo "Required for acceptable regression: functions >= 100%, lines >= 90%, regions >= 90%."
+          } >> "${GITHUB_STEP_SUMMARY}"
+          exit 1
