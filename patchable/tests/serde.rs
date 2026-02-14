@@ -3,6 +3,10 @@ use std::fmt::Debug;
 use patchable::{Patch, Patchable, TryPatch, patchable_model};
 use serde::{Deserialize, Serialize};
 
+fn identity(x: &i32) -> i32 {
+    *x
+}
+
 #[patchable_model]
 #[derive(Clone, Default, Debug, PartialEq)]
 struct FakeMeasurement<T, ClosureType> {
@@ -25,10 +29,6 @@ struct ScopedMeasurement<ScopeType, MeasurementType, MeasurementOutput> {
 
 #[test]
 fn test_scoped_peek() -> anyhow::Result<()> {
-    fn identity(x: &i32) -> i32 {
-        *x
-    }
-
     let fake_measurement: FakeMeasurement<i32, fn(&i32) -> i32> = FakeMeasurement {
         v: 42,
         how: identity,
@@ -79,6 +79,37 @@ fn test_tuple_struct_patch() {
     let patch: <TupleStruct as Patchable>::Patch = serde_json::from_str(r#"[10, 20]"#).unwrap();
     s.patch(patch);
     assert_eq!(s, TupleStruct(10, 20));
+}
+
+#[patchable_model]
+#[derive(Clone, Debug)]
+struct TupleStructWithSkippedMiddle<F>(i32, #[patchable(skip)] F, i64);
+
+#[test]
+fn test_tuple_struct_skip_keeps_original_field_index() {
+    let mut s = TupleStructWithSkippedMiddle(1, identity, 2);
+    let patch: <TupleStructWithSkippedMiddle<fn(i32) -> i32> as Patchable>::Patch =
+        serde_json::from_str(r#"[10, 20]"#).unwrap();
+    s.patch(patch);
+    assert_eq!(s.0, 10);
+    assert_eq!(s.2, 20);
+}
+
+#[patchable_model]
+#[derive(Clone, Debug)]
+struct TupleStructWithWhereClause<T>(i32, T, i64)
+where
+    T: From<(u32, u32)>;
+
+#[test]
+fn test_tuple_struct_with_where_clause() {
+    let mut s = TupleStructWithWhereClause(1, (0, 0), 2);
+    let patch: <TupleStructWithWhereClause<(u32, u32)> as Patchable>::Patch =
+        serde_json::from_str(r#"[10, [42, 84], 20]"#).unwrap();
+    s.patch(patch);
+    assert_eq!(s.0, 10);
+    assert_eq!(s.1, (42, 84));
+    assert_eq!(s.2, 20);
 }
 
 #[patchable_model]
