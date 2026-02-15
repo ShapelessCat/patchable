@@ -60,6 +60,7 @@ logic. See Features and How It Works for details.
 - **Optional `From` Derive**: Enable `From<Struct>` for `StructPatch` with the `impl_from` feature
 - **`#[patchable_model]` Attribute Macro**: Auto-derives `Patchable` and `Patch`, and (with default `serde`) adds `serde::Serialize`
 - **Zero Runtime Overhead**: All code generation happens at compile time
+- **`no_std` Support**: Compatible with `no_std` environments (requires `alloc`)
 
 ## Installation
 
@@ -191,7 +192,7 @@ The `TryPatch` trait allows for fallible updates, which is useful when patch app
 
 ```rust
 use patchable::{TryPatch, Patchable};
-use std::fmt;
+use core::fmt;
 
 struct Config {
     limit: u32,
@@ -211,7 +212,7 @@ impl fmt::Display for InvalidConfigError {
     }
 }
 
-impl std::error::Error for InvalidConfigError {}
+impl core::error::Error for InvalidConfigError {}
 
 impl Patchable for Config {
     type Patch = ConfigPatch;

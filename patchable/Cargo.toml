@@ -17,8 +17,6 @@ path = "src/lib.rs"
 [dependencies]
 patchable-macro = { version = "0.5.5", path = "../patchable-macro" }
 serde.workspace = true
-serde_json.workspace = true
-anyhow.workspace = true
 
 [features]
 default = ["serde"]
@@ -27,8 +25,9 @@ serde = ["patchable-macro/serde"]
 impl_from = ["patchable-macro/impl_from"]
 
 [dev-dependencies]
-thiserror.workspace = true
+anyhow.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 
 [[test]]
 name = "basic"

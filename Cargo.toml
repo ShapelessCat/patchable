@@ -22,10 +22,9 @@ quote = "1.0.43"
 syn = "2.0.114"
 
 anyhow = "1.0.100"
-thiserror = "2.0.17"
 
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.149" }
+serde = { version = "1.0.228", default-features = false, features = ["alloc", "derive"] }
+serde_json = { version = "1.0.149", default-features = false, features = ["alloc"] }
 
 [profile.release]
 debug = false

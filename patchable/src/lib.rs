@@ -13,6 +13,8 @@
 //! structure and providing a consistent way to apply such patches safely.
 
 // Re-export the derive macros.
+#![no_std]
+
 pub use patchable_macro::{Patch, Patchable, patchable_model};
 
 /// A type that declares a companion patch type.
@@ -108,7 +110,7 @@ pub trait Patch: Patchable {
 ///
 /// ```rust
 /// use patchable::{TryPatch, Patchable};
-/// use std::fmt;
+/// use core::fmt;
 ///
 /// #[derive(Debug)]
 /// struct Config {
@@ -129,7 +131,7 @@ pub trait Patch: Patchable {
 ///     }
 /// }
 ///
-/// impl std::error::Error for PatchError {}
+/// impl core::error::Error for PatchError {}
 ///
 /// impl Patchable for Config {
 ///     type Patch = ConfigPatch;
@@ -163,7 +165,7 @@ pub trait Patch: Patchable {
 /// ```
 pub trait TryPatch: Patchable {
     /// The error type returned when applying a patch fails.
-    type Error: std::error::Error + Send + Sync + 'static;
+    type Error: core::error::Error + Send + Sync + 'static;
 
     /// Applies the provided patch to `self`.
     ///
@@ -176,7 +178,7 @@ pub trait TryPatch: Patchable {
 /// Blanket implementation for all [`Patch`] types, where patching is
 /// infallible.
 impl<T: Patch> TryPatch for T {
-    type Error = std::convert::Infallible;
+    type Error = core::convert::Infallible;
 
     #[inline(always)]
     fn try_patch(&mut self, patch: Self::Patch) -> Result<(), Self::Error> {

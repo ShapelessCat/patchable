@@ -1,3 +1,7 @@
+use std::fmt;
+use std::string::String;
+use std::string::ToString;
+
 use patchable::{Patchable, TryPatch};
 
 #[derive(Debug)]
@@ -11,13 +15,13 @@ struct FallibleStructPatch(i32);
 #[derive(Debug)]
 struct PatchError(String);
 
-impl std::fmt::Display for PatchError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for PatchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "PatchError: {}", self.0)
     }
 }
 
-impl std::error::Error for PatchError {}
+impl core::error::Error for PatchError {}
 
 impl Patchable for FallibleStruct {
     type Patch = FallibleStructPatch;

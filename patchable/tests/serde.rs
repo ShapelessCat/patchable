@@ -1,5 +1,3 @@
-use std::fmt::Debug;
-
 use patchable::{Patch, Patchable, TryPatch, patchable_model};
 use serde::{Deserialize, Serialize};
 
