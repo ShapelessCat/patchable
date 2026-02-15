@@ -391,11 +391,11 @@ impl<'a> MacroContext<'a> {
     fn extend_where_clause(&self, bounds: Vec<TokenStream2>) -> TokenStream2 {
         match (&self.generics.where_clause, bounds.is_empty()) {
             (None, true) => quote! {},
-            (None, false) => quote! { where #(#bounds),* },
+            (None, false) => quote! { where #(#bounds)* },
             (Some(where_clause), true) => quote! { #where_clause },
             (Some(where_clause), false) => {
                 let sep = (!where_clause.predicates.trailing_punct()).then_some(quote! {,});
-                quote! { #where_clause #sep #(#bounds),* }
+                quote! { #where_clause #sep #(#bounds)* }
             }
         }
     }
