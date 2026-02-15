@@ -35,21 +35,11 @@ struct AllSkipped {
 #[test]
 fn test_patchable_model_and_derive_generate_patch_types_without_serde() {
     fn assert_patchable<T: patchable::Patchable + patchable::Patch>() {}
-    fn assert_patch_debug<T: patchable::Patchable>()
-    where
-        T::Patch: core::fmt::Debug,
-    {
-    }
 
     assert_patchable::<PlainInner>();
     assert_patchable::<PlainOuter<PlainInner>>();
     assert_patchable::<DeriveOnlyStruct>();
     assert_patchable::<AllSkipped>();
-
-    assert_patch_debug::<PlainInner>();
-    assert_patch_debug::<PlainOuter<PlainInner>>();
-    assert_patch_debug::<DeriveOnlyStruct>();
-    assert_patch_debug::<AllSkipped>();
 }
 
 #[test]

@@ -146,9 +146,9 @@ impl<'a> MacroContext<'a> {
         };
         let patch_name = &self.patch_struct_name;
         let derive_attr = if IS_SERDE_ENABLED {
-            quote! { #[derive(::core::fmt::Debug, ::serde::Deserialize)] }
+            quote! { #[derive(::serde::Deserialize)] }
         } else {
-            quote! { #[derive(::core::fmt::Debug)] }
+            quote! {}
         };
 
         quote! {
@@ -359,31 +359,26 @@ impl<'a> MacroContext<'a> {
     // ===========================================
 
     fn build_where_clause_with_bound(&self, bound: &TokenStream2) -> TokenStream2 {
-        self.build_where_clause_for_patchable_types(|ty, patchable_trait| {
-            quote! {
-                #ty: #bound,
-                <#ty as #patchable_trait>::Patch: ::core::fmt::Debug,
-            }
-        })
+        self.build_where_clause_for_patchable_types(|ty| quote! { #ty: #bound, })
     }
 
     fn build_where_clause_for_from_impl(&self) -> TokenStream2 {
-        self.build_where_clause_for_patchable_types(|ty, patchable_trait| {
+        let patchable_trait = &self.patchable_trait;
+        self.build_where_clause_for_patchable_types(|ty| {
             quote! {
                 #ty: #patchable_trait,
-                <#ty as #patchable_trait>::Patch: ::core::convert::From<#ty> + ::core::fmt::Debug,
+                <#ty as #patchable_trait>::Patch: ::core::convert::From<#ty>,
             }
         })
     }
 
-    fn build_where_clause_for_patchable_types<F>(&self, mut build_bounds: F) -> TokenStream2
+    fn build_where_clause_for_patchable_types<F>(&self, build_bounds: F) -> TokenStream2
     where
-        F: FnMut(&Ident, &TokenStream2) -> TokenStream2,
+        F: Fn(&Ident) -> TokenStream2,
     {
-        let patchable_trait = &self.patchable_trait;
         let bounded_types: Vec<_> = self
             .iter_patchable_type_params()
-            .map(|ty| build_bounds(ty, patchable_trait))
+            .map(build_bounds)
             .collect();
         self.extend_where_clause(bounded_types)
     }
