@@ -211,7 +211,7 @@ jobs:
           fi
 
           echo "Coverage regression detected. Evaluating relaxed thresholds..."
-          if awk -v func="${CURRENT_FUNCTION_COVERAGE}" -v line="${CURRENT_LINE_COVERAGE}" -v region="${CURRENT_REGION_COVERAGE}" 'BEGIN { exit (func + 1e-9 >= 100.0 && line + 1e-9 >= 90.0 && region + 1e-9 >= 90.0) ? 0 : 1 }'; then
+          if awk -v fns="${CURRENT_FUNCTION_COVERAGE}" -v line="${CURRENT_LINE_COVERAGE}" -v region="${CURRENT_REGION_COVERAGE}" 'BEGIN { exit (fns + 1e-9 >= 100.0 && line + 1e-9 >= 90.0 && region + 1e-9 >= 90.0) ? 0 : 1 }'; then
             echo "Coverage status: acceptable regression (functions >= 100%, lines >= 90%, regions >= 90%)."
             {
               echo ""
