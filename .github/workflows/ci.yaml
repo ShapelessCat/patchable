@@ -78,7 +78,7 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload HTML report artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-html
           path: target/llvm-cov/html
@@ -86,7 +86,7 @@ jobs:
           retention-days: 14
 
       - name: Upload coverage summary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-summary
           path: |
