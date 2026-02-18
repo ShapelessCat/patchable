@@ -7,6 +7,11 @@
 //! macro can emit the companion patch struct plus the `Patchable` and `Patch`
 //! trait implementations.
 
+mod from_impl;
+mod patch_impl;
+mod patchable_impl;
+mod utils;
+
 use std::collections::HashMap;
 
 use proc_macro_crate::{FoundCrate, crate_name};
@@ -28,6 +33,7 @@ enum TypeUsage {
     Patchable,
 }
 
+#[derive(Debug)]
 pub(crate) struct MacroContext<'a> {
     /// The name of the struct on which the derive macro is applied.
     struct_name: &'a Ident,
@@ -43,8 +49,8 @@ pub(crate) struct MacroContext<'a> {
     /// This determines whether a field is copied directly (`Keep`) or recursively patched
     /// (`Patch`).
     field_actions: Vec<FieldAction<'a>>,
-    /// The name of the generated companion patch struct (e.g., `MyStructPatch`).
-    patch_struct_name: Ident,
+    /// The generated companion patch struct type (e.g., `MyStructPatch<T, ...>`).
+    patch_struct_type: TokenStream2,
     /// Fully qualified path to the `Patchable` trait.
     patchable_trait: TokenStream2,
     /// Fully qualified path to the `Patch` trait.
@@ -53,13 +59,26 @@ pub(crate) struct MacroContext<'a> {
 
 impl<'a> MacroContext<'a> {
     pub(crate) fn new(input: &'a DeriveInput) -> syn::Result<Self> {
-        let Data::Struct(DataStruct { fields, .. }) = &input.data else {
-            return Err(syn::Error::new_spanned(
-                input,
-                "This derive macro can only be applied to structs",
-            ));
-        };
+        Self::validate_generics(input)?;
+        let fields = Self::extract_struct_fields(input)?;
+        let (preserved_types, field_actions) = Self::collect_field_actions(fields)?;
+        let patch_struct_type =
+            Self::build_patch_struct_type(&input.ident, &input.generics, &preserved_types);
+        let (patchable_trait, patch_trait) = Self::build_trait_paths();
 
+        Ok(Self {
+            struct_name: &input.ident,
+            generics: &input.generics,
+            fields,
+            preserved_types,
+            field_actions,
+            patch_struct_type,
+            patchable_trait,
+            patch_trait,
+        })
+    }
+
+    fn validate_generics(input: &DeriveInput) -> syn::Result<()> {
         if input
             .generics
             .params
@@ -71,331 +90,116 @@ impl<'a> MacroContext<'a> {
                 "Patch derives do not support borrowed fields",
             ));
         }
+        Ok(())
+    }
 
-        let mut preserved_types: HashMap<&Ident, TypeUsage> = HashMap::new();
+    fn extract_struct_fields(input: &'a DeriveInput) -> syn::Result<&'a Fields> {
+        let Data::Struct(DataStruct { fields, .. }) = &input.data else {
+            return Err(syn::Error::new_spanned(
+                input,
+                "This derive macro can only be applied to structs",
+            ));
+        };
+        Ok(fields)
+    }
+
+    fn collect_field_actions(
+        fields: &'a Fields,
+    ) -> syn::Result<(HashMap<&'a Ident, TypeUsage>, Vec<FieldAction<'a>>)> {
+        let mut preserved_types = HashMap::new();
         let mut field_actions = Vec::new();
 
         for (index, field) in fields.iter().enumerate() {
-            if has_patchable_skip_attr(field) {
-                continue;
-            }
-
-            let member = if let Some(field_name) = field.ident.as_ref() {
-                FieldMember::Named(field_name)
-            } else {
-                FieldMember::Unnamed(Index::from(index))
-            };
-
-            let field_type = &field.ty;
-
-            if has_patchable_attr(field) {
-                let Some(type_name) = get_abstract_simple_type_name(field_type) else {
-                    return Err(syn::Error::new_spanned(
-                        field_type,
-                        "Only a simple generic type is supported here", // TODO: remove this limit
-                    ));
-                };
-                // `Patchable` usage overrides `NotPatchable` usage.
-                preserved_types.insert(type_name, TypeUsage::Patchable);
-
-                field_actions.push(FieldAction::Patch {
-                    member,
-                    ty: field_type,
-                });
-            } else {
-                for type_name in collect_used_simple_types(field_type) {
-                    // Only mark as `NotPatchable` if not already marked as `Patchable`.
-                    preserved_types
-                        .entry(type_name)
-                        .or_insert(TypeUsage::NotPatchable);
-                }
-                field_actions.push(FieldAction::Keep {
-                    member,
-                    ty: field_type,
-                });
-            };
+            Self::collect_field_action(index, field, &mut preserved_types, &mut field_actions)?;
         }
 
-        let crate_path = use_site_crate_path();
-
-        Ok(MacroContext {
-            struct_name: &input.ident,
-            generics: &input.generics,
-            fields,
-            preserved_types,
-            field_actions,
-            patch_struct_name: quote::format_ident!("{}Patch", &input.ident),
-            patchable_trait: quote! { #crate_path :: Patchable },
-            patch_trait: quote! { #crate_path :: Patch },
-        })
+        Ok((preserved_types, field_actions))
     }
 
-    // ============================================================
-    // #[derive(::serde::Deserialize)]
-    // struct InputTypePatch<T, ...> ...
-    // ============================================================
-
-    pub(crate) fn build_patch_struct(&self) -> TokenStream2 {
-        let generic_params = self.build_patch_type_generics();
-        let where_clause = self.build_where_clause_with_bound(&self.patchable_trait);
-        let patch_fields = self.generate_patch_fields();
-        let body = match &self.fields {
-            Fields::Named(_) => quote! { #generic_params #where_clause { #(#patch_fields),* } },
-            Fields::Unnamed(_) => quote! { #generic_params ( #(#patch_fields),* ) #where_clause; },
-            Fields::Unit => quote! {;},
-        };
-        let patch_name = &self.patch_struct_name;
-        let derive_attr = if IS_SERDE_ENABLED {
-            quote! { #[derive(::serde::Deserialize)] }
-        } else {
-            quote! {}
-        };
-
-        quote! {
-            #derive_attr
-            pub struct #patch_name #body
-        }
-    }
-
-    // ============================================================
-    // impl<T, ...> Patchable for OriginalStruct<T, ...
-    // ============================================================
-
-    pub(crate) fn build_patchable_trait_impl(&self) -> TokenStream2 {
-        let patchable_trait = &self.patchable_trait;
-        let (impl_generics, type_generics, _) = self.generics.split_for_impl();
-        let where_clause = self.build_where_clause_with_bound(patchable_trait);
-        let assoc_type_decl = self.build_associated_type_declaration();
-
-        let input_struct_name = self.struct_name;
-
-        quote! {
-            impl #impl_generics #patchable_trait
-                for #input_struct_name #type_generics
-            #where_clause {
-                #assoc_type_decl
-            }
-        }
-    }
-
-    // ============================================================
-    // impl<T, ...> Patch for OriginalStruct<T, ...
-    // ============================================================
-
-    pub(crate) fn build_patch_trait_impl(&self) -> TokenStream2 {
-        let patch_trait = &self.patch_trait;
-        let (impl_generics, type_generics, _) = self.generics.split_for_impl();
-        let where_clause = self.build_where_clause_with_bound(patch_trait);
-
-        let input_struct_name = self.struct_name;
-
-        let patch_param_name = if self.field_actions.is_empty() {
-            quote! { _patch }
-        } else {
-            quote! { patch }
-        };
-
-        let patch_method_body = self.generate_patch_method_body();
-        quote! {
-            impl #impl_generics #patch_trait
-                for #input_struct_name #type_generics
-            #where_clause {
-                #[inline(always)]
-                fn patch(&mut self, #patch_param_name: Self::Patch) {
-                    #patch_method_body
-                }
-            }
-        }
-    }
-
-    // ======================================================================
-    // impl<T, ...> From<OriginalStruct<T, ...>> for OriginalStructPatch<...>
-    // ======================================================================
-
-    pub(crate) fn build_from_trait_impl(&self) -> TokenStream2 {
-        let (impl_generics, type_generics, _) = self.generics.split_for_impl();
-        let patch_type_generics = self.build_patch_type_generics();
-        let where_clause = self.build_where_clause_for_from_impl();
-
-        let input_struct_name = self.struct_name;
-        let patch_struct_name = &self.patch_struct_name;
-        let from_method_body = self.build_from_method_body();
-
-        quote! {
-            impl #impl_generics ::core::convert::From<#input_struct_name #type_generics>
-                for #patch_struct_name #patch_type_generics
-            #where_clause {
-                #[inline(always)]
-                fn from(value: #input_struct_name #type_generics) -> Self {
-                    #from_method_body
-                }
-            }
-        }
-    }
-
-    fn generate_patch_fields(&self) -> Vec<TokenStream2> {
-        let patchable_trait = &self.patchable_trait;
-        self.field_actions
-            .iter()
-            .map(|action| match action {
-                FieldAction::Keep { member, ty } => match member {
-                    FieldMember::Named(name) => quote! { #name : #ty },
-                    FieldMember::Unnamed(_) => quote! { #ty },
-                },
-                FieldAction::Patch { member, ty } => {
-                    let field = match member {
-                        FieldMember::Named(name) => quote! { #name : <#ty as #patchable_trait>::Patch },
-                        FieldMember::Unnamed(_) => quote! { <#ty as #patchable_trait>::Patch },
-                    };
-                    if IS_SERDE_ENABLED {
-                        let bound = quote! { <#ty as #patchable_trait>::Patch: ::serde::de::DeserializeOwned };
-                        let bound_string = bound.to_string();
-                        let bound_lit = syn::LitStr::new(&bound_string, Span::call_site());
-                        quote! {
-                            #[serde(bound(deserialize = #bound_lit))]
-                            #field
-                        }
-                    } else {
-                        quote! { #field }
-                    }
-                }
-            })
-            .collect()
-    }
-
-    fn generate_patch_method_body(&self) -> TokenStream2 {
-        if self.field_actions.is_empty() {
-            return quote! {};
+    fn collect_field_action(
+        index: usize,
+        field: &'a Field,
+        preserved_types: &mut HashMap<&'a Ident, TypeUsage>,
+        field_actions: &mut Vec<FieldAction<'a>>,
+    ) -> syn::Result<()> {
+        if has_patchable_skip_attr(field) {
+            return Ok(());
         }
 
-        let statements = self
-            .field_actions
-            .iter()
-            .enumerate()
-            .map(|(patch_index, action)| match action {
-                FieldAction::Keep { member, .. } => {
-                    let patch_member = patch_member(member, patch_index);
-                    quote! {
-                        self.#member = patch.#patch_member;
-                    }
-                }
-                FieldAction::Patch { member, .. } => {
-                    let patch_member = patch_member(member, patch_index);
-                    quote! {
-                        self.#member.patch(patch.#patch_member);
-                    }
-                }
+        let member = Self::field_member(field, index);
+        let field_type = &field.ty;
+
+        if has_patchable_attr(field) {
+            let type_name = Self::extract_patchable_type_name(field_type)?;
+            // `Patchable` usage overrides `NotPatchable` usage.
+            preserved_types.insert(type_name, TypeUsage::Patchable);
+            field_actions.push(FieldAction::Patch {
+                member,
+                ty: field_type,
             });
+        } else {
+            Self::record_non_patchable_type_usage(field_type, preserved_types);
+            field_actions.push(FieldAction::Keep {
+                member,
+                ty: field_type,
+            });
+        }
+        Ok(())
+    }
 
-        quote! {
-            #(#statements)*
+    fn field_member(field: &'a Field, index: usize) -> FieldMember<'a> {
+        if let Some(field_name) = field.ident.as_ref() {
+            FieldMember::Named(field_name)
+        } else {
+            FieldMember::Unnamed(Index::from(index))
         }
     }
 
-    fn build_from_method_body(&self) -> TokenStream2 {
-        match &self.fields {
-            Fields::Named(_) => {
-                let field_initializers = self.field_actions.iter().map(|action| {
-                    let member = action.member();
-                    let value = action.build_initializer_expr();
-                    quote! { #member: #value }
-                });
-                quote! { Self { #(#field_initializers),* } }
-            }
-            Fields::Unnamed(_) => {
-                let field_values = self
-                    .field_actions
-                    .iter()
-                    .map(|action| action.build_initializer_expr());
-                quote! { Self(#(#field_values),*) }
-            }
-            Fields::Unit => {
-                debug_assert!(self.field_actions.is_empty());
-                quote! { Self }
-            }
-        }
-    }
-
-    fn iter_patchable_type_params(&self) -> impl Iterator<Item = &Ident> + '_ {
-        self.generics.type_params().filter_map(|param| {
-            matches!(
-                self.preserved_types.get(&param.ident),
-                Some(TypeUsage::Patchable)
+    fn extract_patchable_type_name(field_type: &'a Type) -> syn::Result<&'a Ident> {
+        get_abstract_simple_type_name(field_type).ok_or_else(|| {
+            syn::Error::new_spanned(
+                field_type,
+                "Only a simple generic type is supported here", // TODO: remove this limit
             )
-            .then_some(&param.ident)
         })
     }
 
-    fn iter_preserved_type_params(&self) -> impl Iterator<Item = &Ident> + '_ {
-        self.generics.type_params().filter_map(|param| {
-            self.preserved_types
+    fn record_non_patchable_type_usage(
+        field_type: &'a Type,
+        preserved_types: &mut HashMap<&'a Ident, TypeUsage>,
+    ) {
+        for type_name in collect_used_simple_types(field_type) {
+            // Only mark as `NotPatchable` if not already marked as `Patchable`.
+            preserved_types
+                .entry(type_name)
+                .or_insert(TypeUsage::NotPatchable);
+        }
+    }
+
+    fn build_patch_struct_type(
+        struct_name: &Ident,
+        generics: &Generics,
+        preserved_types: &HashMap<&'a Ident, TypeUsage>,
+    ) -> TokenStream2 {
+        let patch_struct_name = quote::format_ident!("{}Patch", struct_name);
+        let patch_generic_params = generics.type_params().filter_map(|param| {
+            preserved_types
                 .contains_key(&param.ident)
                 .then_some(&param.ident)
-        })
+        });
+        quote! { #patch_struct_name <#(#patch_generic_params),*> }
     }
 
-    // ============================================================
-    // type Patch = MyPatch<T, U, ...>
-    // ============================================================
-
-    fn build_associated_type_declaration(&self) -> TokenStream2 {
-        let patch_type_generics = self.build_patch_type_generics();
-        let state_name = &self.patch_struct_name;
-        quote! {
-            type Patch = #state_name #patch_type_generics;
-        }
-    }
-
-    fn build_patch_type_generics(&self) -> TokenStream2 {
-        let patch_generic_params = self.iter_preserved_type_params();
-        // Empty `<>` is legal in Rust, and adding or dropping the `<>` doesn't affect the
-        // definition. For example, `struct A<>(i32)` and `struct A(i32)` have the
-        // same HIR.
-        quote! { <#(#patch_generic_params),*> }
-    }
-
-    // ===========================================
-    // Helper functions for building where clauses
-    // ===========================================
-
-    fn build_where_clause_with_bound(&self, bound: &TokenStream2) -> TokenStream2 {
-        self.build_where_clause_for_patchable_types(|ty| quote! { #ty: #bound, })
-    }
-
-    fn build_where_clause_for_from_impl(&self) -> TokenStream2 {
-        let patchable_trait = &self.patchable_trait;
-        self.build_where_clause_for_patchable_types(|ty| {
-            quote! {
-                #ty: #patchable_trait,
-                <#ty as #patchable_trait>::Patch: ::core::convert::From<#ty>,
-            }
-        })
-    }
-
-    fn build_where_clause_for_patchable_types<F>(&self, build_bounds: F) -> TokenStream2
-    where
-        F: Fn(&Ident) -> TokenStream2,
-    {
-        let bounded_types: Vec<_> = self
-            .iter_patchable_type_params()
-            .map(build_bounds)
-            .collect();
-        self.extend_where_clause(bounded_types)
-    }
-
-    fn extend_where_clause(&self, bounds: Vec<TokenStream2>) -> TokenStream2 {
-        match (&self.generics.where_clause, bounds.is_empty()) {
-            (None, true) => quote! {},
-            (None, false) => quote! { where #(#bounds)* },
-            (Some(where_clause), true) => quote! { #where_clause },
-            (Some(where_clause), false) => {
-                let sep = (!where_clause.predicates.trailing_punct()).then_some(quote! {,});
-                quote! { #where_clause #sep #(#bounds)* }
-            }
-        }
+    fn build_trait_paths() -> (TokenStream2, TokenStream2) {
+        let crate_path = use_site_crate_path();
+        (
+            quote! { #crate_path :: Patchable },
+            quote! { #crate_path :: Patch },
+        )
     }
 }
 
+#[derive(Debug)]
 enum FieldMember<'a> {
     Named(&'a Ident),
     Unnamed(Index),
@@ -410,6 +214,7 @@ impl<'a> ToTokens for FieldMember<'a> {
     }
 }
 
+#[derive(Debug)]
 enum FieldAction<'a> {
     Keep {
         member: FieldMember<'a>,
@@ -433,16 +238,6 @@ impl<'a> FieldAction<'a> {
         match self {
             FieldAction::Keep { .. } => quote! { value.#member },
             FieldAction::Patch { .. } => quote! { ::core::convert::From::from(value.#member) },
-        }
-    }
-}
-
-fn patch_member(member: &FieldMember<'_>, patch_index: usize) -> TokenStream2 {
-    match member {
-        FieldMember::Named(name) => quote! { #name },
-        FieldMember::Unnamed(_) => {
-            let index = Index::from(patch_index);
-            quote! { #index }
         }
     }
 }
