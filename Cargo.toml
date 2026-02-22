@@ -15,18 +15,6 @@ description = "Automatically derive patch types for Rust structs to enable effic
 categories = ["data-structures", "rust-patterns"]
 keywords = ["patch", "update", "derive", "macro", "serde"]
 
-[workspace.dependencies]
-proc-macro2 = "1.0.105"
-proc-macro-crate = "3.4.0"
-quote = "1.0.43"
-syn = "2.0.114"
-
-anyhow = "1.0.100"
-thiserror = "2.0.17"
-
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.149" }
-
 [profile.release]
 debug = false
 strip = true

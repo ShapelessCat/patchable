@@ -13,6 +13,8 @@
 //! structure and providing a consistent way to apply such patches safely.
 
 // Re-export the derive macros.
+#![no_std]
+
 pub use patchable_macro::{Patch, Patchable, patchable_model};
 
 /// A type that declares a companion patch type.
@@ -69,23 +71,27 @@ pub use patchable_macro::{Patch, Patchable, patchable_model};
 /// }
 /// //^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ///
-/// let mut accumulator = Accumulator {
-///     prev_control_signal: -1,
-///     filter: |x: &i32| *x > 300,
-///     accumulated: 0,
-/// };
+/// fn main() {
+///     let accumulator = Accumulator {
+///         prev_control_signal: 6,
+///         filter: |x: &i32| *x > 300,
+///         accumulated: 15,
+///     };
 ///
-/// let accumulator_patch: AccumulatorPatch<i32> = serde_json::from_str(
-///     r#"{
-///         "prev_control_signal": 6,
-///         "accumulated": 15
-///     }"#
-/// ).unwrap();
+///     let state_bytes = postcard::to_vec::<_, 128>(&accumulator).unwrap();
+///     let accumulator_patch: AccumulatorPatch<i32> = postcard::from_bytes(&state_bytes).unwrap();
 ///
-/// accumulator.patch(accumulator_patch);
+///     let mut recovered_accumulator = Accumulator {
+///         prev_control_signal: -1,
+///         accumulated: 0,
+///         ..accumulator
+///     };
 ///
-/// assert_eq!(accumulator.prev_control_signal, 6i32);
-/// assert_eq!(accumulator.accumulated, 15u32);
+///     recovered_accumulator.patch(accumulator_patch);
+///
+///     assert_eq!(recovered_accumulator.prev_control_signal, accumulator.prev_control_signal);
+///     assert_eq!(recovered_accumulator.accumulated, accumulator.accumulated);
+/// }
 /// ```
 /// Declares the associated patch type.
 pub trait Patchable {
@@ -108,7 +114,7 @@ pub trait Patch: Patchable {
 ///
 /// ```rust
 /// use patchable::{TryPatch, Patchable};
-/// use std::fmt;
+/// use core::fmt;
 ///
 /// #[derive(Debug)]
 /// struct Config {
@@ -129,7 +135,7 @@ pub trait Patch: Patchable {
 ///     }
 /// }
 ///
-/// impl std::error::Error for PatchError {}
+/// impl core::error::Error for PatchError {}
 ///
 /// impl Patchable for Config {
 ///     type Patch = ConfigPatch;
@@ -153,17 +159,19 @@ pub trait Patch: Patchable {
 ///     }
 /// }
 ///
-/// let mut config = Config { concurrency: 1 };
-/// let valid_patch = ConfigPatch { concurrency: 4 };
-/// config.try_patch(valid_patch).unwrap();
-/// assert_eq!(config.concurrency, 4);
+/// fn main() {
+///     let mut config = Config { concurrency: 1 };
+///     let valid_patch = ConfigPatch { concurrency: 4 };
+///     config.try_patch(valid_patch).unwrap();
+///     assert_eq!(config.concurrency, 4);
 ///
-/// let invalid_patch = ConfigPatch { concurrency: 0 };
-/// assert!(config.try_patch(invalid_patch).is_err());
+///     let invalid_patch = ConfigPatch { concurrency: 0 };
+///     assert!(config.try_patch(invalid_patch).is_err());
+/// }
 /// ```
 pub trait TryPatch: Patchable {
     /// The error type returned when applying a patch fails.
-    type Error: std::error::Error + Send + Sync + 'static;
+    type Error: core::error::Error + Send + Sync + 'static;
 
     /// Applies the provided patch to `self`.
     ///
@@ -176,7 +184,7 @@ pub trait TryPatch: Patchable {
 /// Blanket implementation for all [`Patch`] types, where patching is
 /// infallible.
 impl<T: Patch> TryPatch for T {
-    type Error = std::convert::Infallible;
+    type Error = core::convert::Infallible;
 
     #[inline(always)]
     fn try_patch(&mut self, patch: Self::Patch) -> Result<(), Self::Error> {
