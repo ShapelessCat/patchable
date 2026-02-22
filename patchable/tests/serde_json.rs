@@ -1,31 +1,8 @@
-use std::fmt::Debug;
+use patchable::{Patch, Patchable, TryPatch};
 
-use patchable::{Patch, Patchable, TryPatch, patchable_model};
-use serde::{Deserialize, Serialize};
+mod common;
 
-fn identity(x: &i32) -> i32 {
-    *x
-}
-
-#[patchable_model]
-#[derive(Clone, Default, Debug, PartialEq)]
-struct FakeMeasurement<T, ClosureType> {
-    v: T,
-    #[patchable(skip)]
-    how: ClosureType,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-struct MeasurementResult<T>(pub T);
-
-#[patchable_model]
-#[derive(Clone, Debug)]
-struct ScopedMeasurement<ScopeType, MeasurementType, MeasurementOutput> {
-    current_control_level: ScopeType,
-    #[patchable]
-    inner: MeasurementType,
-    current_base: MeasurementResult<MeasurementOutput>,
-}
+use common::*;
 
 #[test]
 fn test_scoped_peek() -> anyhow::Result<()> {
@@ -50,12 +27,6 @@ fn test_scoped_peek() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[patchable_model]
-#[derive(Clone, Default, Debug)]
-struct SimpleStruct {
-    val: i32,
-}
-
 #[test]
 fn test_try_patch_blanket_impl() {
     let mut s = SimpleStruct { val: 10 };
@@ -69,10 +40,6 @@ fn test_try_patch_blanket_impl() {
     assert_eq!(s.val, 20);
 }
 
-#[patchable_model]
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct TupleStruct(i32, u32);
-
 #[test]
 fn test_tuple_struct_patch() {
     let mut s = TupleStruct(1, 2);
@@ -80,10 +47,6 @@ fn test_tuple_struct_patch() {
     s.patch(patch);
     assert_eq!(s, TupleStruct(10, 20));
 }
-
-#[patchable_model]
-#[derive(Clone, Debug)]
-struct TupleStructWithSkippedMiddle<F>(i32, #[patchable(skip)] F, i64);
 
 #[test]
 fn test_tuple_struct_skip_keeps_original_field_index() {
@@ -94,12 +57,6 @@ fn test_tuple_struct_skip_keeps_original_field_index() {
     assert_eq!(s.0, 10);
     assert_eq!(s.2, 20);
 }
-
-#[patchable_model]
-#[derive(Clone, Debug)]
-struct TupleStructWithWhereClause<T>(i32, T, i64)
-where
-    T: From<(u32, u32)>;
 
 #[test]
 fn test_tuple_struct_with_where_clause() {
@@ -112,24 +69,12 @@ fn test_tuple_struct_with_where_clause() {
     assert_eq!(s.2, 20);
 }
 
-#[patchable_model]
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct UnitStruct;
-
 #[test]
 fn test_unit_struct_patch() {
     let mut s = UnitStruct;
     let patch: <UnitStruct as Patchable>::Patch = serde_json::from_str("null").unwrap();
     s.patch(patch);
     assert_eq!(s, UnitStruct);
-}
-
-#[patchable_model]
-#[derive(Clone, Debug)]
-struct SkipSerializingStruct {
-    #[patchable(skip)]
-    skipped: i32,
-    value: i32,
 }
 
 #[test]
@@ -146,13 +91,6 @@ fn test_skip_serializing_field_is_excluded() {
     s.patch(patch);
     assert_eq!(s.skipped, 5);
     assert_eq!(s.value, 42);
-}
-
-#[derive(Clone, Debug, Serialize, patchable::Patchable, patchable::Patch)]
-struct DeriveOnlySkipBehavior {
-    #[patchable(skip)]
-    hidden: i32,
-    shown: i32,
 }
 
 #[test]
@@ -176,27 +114,13 @@ fn test_direct_derive_does_not_add_serde_skip() {
     assert_eq!(target.shown, 5);
 }
 
-#[patchable_model]
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-struct Counter {
-    value: i32,
-}
-
-#[patchable_model]
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct MixedGenericUsage<T> {
-    history: Vec<T>,
-    #[patchable]
-    current: T,
-}
-
 #[test]
 fn test_mixed_generic_usage_patches_and_replaces() {
     let mut value = MixedGenericUsage {
         history: vec![Counter { value: 1 }],
         current: Counter { value: 2 },
     };
-    let patch: <MixedGenericUsage<Counter> as Patchable>::Patch =
+    let patch: <MixedGenericUsage<Counter, Vec<Counter>> as Patchable>::Patch =
         serde_json::from_str(r#"{"history":[{"value":10},{"value":20}],"current":{"value":99}}"#)
             .unwrap();
 
@@ -206,17 +130,6 @@ fn test_mixed_generic_usage_patches_and_replaces() {
         vec![Counter { value: 10 }, Counter { value: 20 }]
     );
     assert_eq!(value.current, Counter { value: 99 });
-}
-
-#[patchable_model]
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct ExistingWhereTrailing<T, U>
-where
-    U: Default,
-{
-    #[patchable]
-    inner: T,
-    marker: U,
 }
 
 #[test]
@@ -236,16 +149,6 @@ fn test_existing_where_clause_with_trailing_comma() {
             marker: (),
         }
     );
-}
-
-#[patchable_model]
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct ExistingWhereNoTrailing<T>
-where
-    T: Clone,
-{
-    #[patchable]
-    inner: T,
 }
 
 #[test]
