@@ -1,0 +1,5 @@
+error: unrecognized `patchable` parameter
+ --> tests/ui/derive_fail_patchable_name_value_parameter.rs:5:5
+  |
+5 |     #[patchable = "skip"]
+  |     ^^^^^^^^^^^^^^^^^^^^^

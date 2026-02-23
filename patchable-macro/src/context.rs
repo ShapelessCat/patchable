@@ -20,7 +20,7 @@ use quote::{ToTokens, quote};
 use syn::visit::Visit;
 use syn::{
     Attribute, Data, DataStruct, DeriveInput, Field, Fields, GenericParam, Generics, Ident, Index,
-    PathArguments, Type,
+    Meta, PathArguments, Type,
 };
 
 pub const IS_SERDE_ENABLED: bool = cfg!(feature = "serde");
@@ -85,22 +85,24 @@ impl<'a> MacroContext<'a> {
             .iter()
             .any(|g| matches!(g, GenericParam::Lifetime(_)))
         {
-            return Err(syn::Error::new_spanned(
+            Err(syn::Error::new_spanned(
                 &input.generics,
                 "Patch derives do not support borrowed fields",
-            ));
+            ))
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     fn extract_struct_fields(input: &'a DeriveInput) -> syn::Result<&'a Fields> {
-        let Data::Struct(DataStruct { fields, .. }) = &input.data else {
-            return Err(syn::Error::new_spanned(
+        if let Data::Struct(DataStruct { fields, .. }) = &input.data {
+            Ok(fields)
+        } else {
+            Err(syn::Error::new_spanned(
                 input,
                 "This derive macro can only be applied to structs",
-            ));
-        };
-        Ok(fields)
+            ))
+        }
     }
 
     fn collect_field_actions(
@@ -122,6 +124,7 @@ impl<'a> MacroContext<'a> {
         preserved_types: &mut HashMap<&'a Ident, TypeUsage>,
         field_actions: &mut Vec<FieldAction<'a>>,
     ) -> syn::Result<()> {
+        Self::validate_patchable_params(field)?;
         if has_patchable_skip_attr(field) {
             return Ok(());
         }
@@ -143,6 +146,30 @@ impl<'a> MacroContext<'a> {
                 member,
                 ty: field_type,
             });
+        }
+        Ok(())
+    }
+
+    fn validate_patchable_params(field: &Field) -> syn::Result<()> {
+        for attr in field.attrs.iter().filter(|attr| is_patchable_attr(attr)) {
+            match &attr.meta {
+                Meta::Path(_) => {}
+                Meta::List(_) => {
+                    attr.parse_nested_meta(|meta| {
+                        if meta.path.is_ident("skip") {
+                            Ok(())
+                        } else {
+                            Err(meta.error("unrecognized `patchable` parameter"))
+                        }
+                    })?;
+                }
+                Meta::NameValue(_) => {
+                    return Err(syn::Error::new_spanned(
+                        attr,
+                        "unrecognized `patchable` parameter",
+                    ));
+                }
+            }
         }
         Ok(())
     }

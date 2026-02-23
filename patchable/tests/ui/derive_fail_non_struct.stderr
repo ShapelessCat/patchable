@@ -1,0 +1,7 @@
+error: This derive macro can only be applied to structs
+ --> tests/ui/derive_fail_non_struct.rs:4:1
+  |
+4 | / enum NotAStruct {
+5 | |     Value(i32),
+6 | | }
+  | |_^
