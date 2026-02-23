@@ -1,0 +1,5 @@
+error: unrecognized `patchable` parameter
+ --> tests/ui/derive_fail_patchable_unknown_parameter.rs:5:17
+  |
+5 |     #[patchable(unknown)]
+  |                 ^^^^^^^
