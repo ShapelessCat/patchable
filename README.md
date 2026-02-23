@@ -70,7 +70,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-patchable = "0.5.5" # You can use the latest version
+patchable = "0.5.8" # Please use the latest version
 ```
 
 Check this project's Cargo feature flags to see what you want to enable or disable.

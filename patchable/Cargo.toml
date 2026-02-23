@@ -15,7 +15,7 @@ readme.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-patchable-macro = { version = "0.5.7", path = "../patchable-macro" }
+patchable-macro = { version = "0.5.8", path = "../patchable-macro" }
 
 [features]
 default = ["serde"]
