@@ -36,6 +36,7 @@ impl<'a> MacroContext<'a> {
     }
 
     fn generate_patch_method_body(&self) -> TokenStream2 {
+        let patch_trait = &self.patch_trait;
         if self.field_actions.is_empty() {
             return quote! {};
         }
@@ -54,7 +55,7 @@ impl<'a> MacroContext<'a> {
                 FieldAction::Patch { member, .. } => {
                     let patch_member = patch_member(member, patch_index);
                     quote! {
-                        self.#member.patch(patch.#patch_member);
+                        #patch_trait::patch(&mut self.#member, patch.#patch_member);
                     }
                 }
             });
