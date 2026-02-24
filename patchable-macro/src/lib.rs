@@ -28,7 +28,7 @@ mod context;
 
 use syn::DeriveInput;
 
-use crate::context::{IS_SERDE_ENABLED, has_patchable_skip_attr, use_site_crate_path};
+use crate::context::{IS_SERDE_ENABLED, crate_path, has_patchable_skip_attr};
 
 const IS_IMPL_FROM_ENABLED: bool = cfg!(feature = "impl_from");
 
@@ -43,18 +43,18 @@ const IS_IMPL_FROM_ENABLED: bool = cfg!(feature = "impl_from");
 ///
 /// This macro preserves the original struct shape and only mutates attributes.
 pub fn patchable_model(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut input = parse_macro_input!(item as ItemStruct);
-    let crate_root = use_site_crate_path();
-
+    let crate_path = crate_path();
     let derives = if IS_SERDE_ENABLED {
         parse_quote! {
-            #[derive(#crate_root::Patchable, #crate_root::Patch, ::serde::Serialize)]
+            #[derive(#crate_path::Patchable, #crate_path::Patch, ::serde::Serialize)]
         }
     } else {
         parse_quote! {
-            #[derive(#crate_root::Patchable, #crate_root::Patch)]
+            #[derive(#crate_path::Patchable, #crate_path::Patch)]
         }
     };
+
+    let mut input = parse_macro_input!(item as ItemStruct);
     input.attrs.push(derives);
 
     if IS_SERDE_ENABLED {
