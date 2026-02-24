@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9] - 2026-02-24
+
+### Fixed
+
+- Fixed `#[derive(Patch)]` code generation to use fully qualified trait calls when patching nested
+  fields, avoiding method-resolution issues.
+- Fixed crate root path in generated code, consistently use `::patchable`, so derives and
+  `#[patchable_model]` resolve correctly in integration tests and other non-library targets.
+
 ## [0.5.8] - 2026-02-23
 
 ### Added
@@ -127,6 +136,7 @@ Early development, and you shouldn't use these versions for your projects.
 - Automatic patch type generation
 - Basic field patching functionality
 
+[0.5.9]: https://github.com/ShapelessCat/patchable/releases/tag/v0.5.9
 [0.5.8]: https://github.com/ShapelessCat/patchable/releases/tag/v0.5.8
 [0.5.7]: https://github.com/ShapelessCat/patchable/releases/tag/v0.5.7
 [0.5.6]: https://github.com/ShapelessCat/patchable/releases/tag/v0.5.6
