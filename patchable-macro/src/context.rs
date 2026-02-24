@@ -14,8 +14,7 @@ mod utils;
 
 use std::collections::HashMap;
 
-use proc_macro_crate::{FoundCrate, crate_name};
-use proc_macro2::{Span, TokenStream as TokenStream2};
+use proc_macro2::TokenStream as TokenStream2;
 use quote::{ToTokens, quote};
 use syn::visit::Visit;
 use syn::{
@@ -64,7 +63,9 @@ impl<'a> MacroContext<'a> {
         let (preserved_types, field_actions) = Self::collect_field_actions(fields)?;
         let patch_struct_type =
             Self::build_patch_struct_type(&input.ident, &input.generics, &preserved_types);
-        let (patchable_trait, patch_trait) = Self::build_trait_paths();
+        let crate_path = crate_path();
+        let patchable_trait = quote! { #crate_path :: Patchable };
+        let patch_trait = quote! { #crate_path :: Patch };
 
         Ok(Self {
             struct_name: &input.ident,
@@ -216,14 +217,6 @@ impl<'a> MacroContext<'a> {
         });
         quote! { #patch_struct_name <#(#patch_generic_params),*> }
     }
-
-    fn build_trait_paths() -> (TokenStream2, TokenStream2) {
-        let crate_path = use_site_crate_path();
-        (
-            quote! { #crate_path :: Patchable },
-            quote! { #crate_path :: Patch },
-        )
-    }
 }
 
 #[derive(Debug)]
@@ -269,16 +262,9 @@ impl<'a> FieldAction<'a> {
     }
 }
 
-pub fn use_site_crate_path() -> TokenStream2 {
-    let found_crate =
-        crate_name(PATCHABLE).expect("patchable library should be present in `Cargo.toml`");
-    match found_crate {
-        FoundCrate::Itself => quote! { crate },
-        FoundCrate::Name(name) => {
-            let ident = Ident::new(&name, Span::call_site());
-            quote!( ::#ident )
-        }
-    }
+#[inline]
+pub(super) fn crate_path() -> TokenStream2 {
+    quote! { ::patchable }
 }
 
 #[inline]

@@ -15,6 +15,8 @@
 // Re-export the derive macros.
 #![no_std]
 
+extern crate self as patchable;
+
 pub use patchable_macro::{Patch, Patchable, patchable_model};
 
 /// A type that declares a companion patch type.
