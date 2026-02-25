@@ -9,6 +9,7 @@
 
 mod from_impl;
 mod patch_impl;
+mod patch_struct;
 mod patchable_impl;
 mod utils;
 
@@ -30,6 +31,12 @@ const PATCHABLE: &str = "patchable";
 enum TypeUsage {
     NotPatchable,
     Patchable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FieldBehavior {
+    Keep,
+    Patch,
 }
 
 #[derive(Debug)]
@@ -110,7 +117,7 @@ impl<'a> MacroContext<'a> {
         fields: &'a Fields,
     ) -> syn::Result<(HashMap<&'a Ident, TypeUsage>, Vec<FieldAction<'a>>)> {
         let mut preserved_types = HashMap::new();
-        let mut field_actions = Vec::new();
+        let mut field_actions = Vec::with_capacity(fields.len());
 
         for (index, field) in fields.iter().enumerate() {
             Self::collect_field_action(index, field, &mut preserved_types, &mut field_actions)?;
@@ -125,45 +132,47 @@ impl<'a> MacroContext<'a> {
         preserved_types: &mut HashMap<&'a Ident, TypeUsage>,
         field_actions: &mut Vec<FieldAction<'a>>,
     ) -> syn::Result<()> {
-        Self::validate_patchable_params(field)?;
-        if has_patchable_skip_attr(field) {
-            return Ok(());
-        }
-
-        let member = Self::field_member(field, index);
-        let field_type = &field.ty;
-
-        if has_patchable_attr(field) {
-            let type_name = Self::extract_patchable_type_name(field_type)?;
-            // `Patchable` usage overrides `NotPatchable` usage.
-            preserved_types.insert(type_name, TypeUsage::Patchable);
-            field_actions.push(FieldAction::Patch {
-                member,
-                ty: field_type,
-            });
-        } else {
-            Self::record_non_patchable_type_usage(field_type, preserved_types);
-            field_actions.push(FieldAction::Keep {
-                member,
-                ty: field_type,
-            });
+        if let Some(field_behavior) = Self::determine_field_behavior(field)? {
+            let member = Self::field_member(field, index);
+            let field_type = &field.ty;
+            match field_behavior {
+                FieldBehavior::Patch => {
+                    let type_name = Self::extract_patchable_type_name(field_type)?;
+                    // `Patchable` usage overrides `NotPatchable` usage.
+                    preserved_types.insert(type_name, TypeUsage::Patchable);
+                    field_actions.push(FieldAction::Patch {
+                        member,
+                        ty: field_type,
+                    });
+                }
+                FieldBehavior::Keep => {
+                    Self::record_non_patchable_type_usage(field_type, preserved_types);
+                    field_actions.push(FieldAction::Keep {
+                        member,
+                        ty: field_type,
+                    });
+                }
+            }
         }
         Ok(())
     }
 
-    fn validate_patchable_params(field: &Field) -> syn::Result<()> {
+    fn determine_field_behavior(field: &Field) -> syn::Result<Option<FieldBehavior>> {
+        let mut saw_patchable_attr = false;
+        let mut saw_skip = false;
+
         for attr in field.attrs.iter().filter(|attr| is_patchable_attr(attr)) {
+            saw_patchable_attr = true;
             match &attr.meta {
                 Meta::Path(_) => {}
-                Meta::List(_) => {
-                    attr.parse_nested_meta(|meta| {
-                        if meta.path.is_ident("skip") {
-                            Ok(())
-                        } else {
-                            Err(meta.error("unrecognized `patchable` parameter"))
-                        }
-                    })?;
-                }
+                Meta::List(_) => attr.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("skip") {
+                        saw_skip = true;
+                        Ok(())
+                    } else {
+                        Err(meta.error("unrecognized `patchable` parameter"))
+                    }
+                })?,
                 Meta::NameValue(_) => {
                     return Err(syn::Error::new_spanned(
                         attr,
@@ -172,7 +181,14 @@ impl<'a> MacroContext<'a> {
                 }
             }
         }
-        Ok(())
+
+        Ok(if saw_skip {
+            None
+        } else if saw_patchable_attr {
+            Some(FieldBehavior::Patch)
+        } else {
+            Some(FieldBehavior::Keep)
+        })
     }
 
     fn field_member(field: &'a Field, index: usize) -> FieldMember<'a> {
@@ -225,6 +241,18 @@ enum FieldMember<'a> {
     Unnamed(Index),
 }
 
+impl<'a> FieldMember<'a> {
+    fn patch_member(&self, patch_index: usize) -> TokenStream2 {
+        match self {
+            FieldMember::Named(name) => quote! { #name },
+            FieldMember::Unnamed(_) => {
+                let index = Index::from(patch_index);
+                quote! { #index }
+            }
+        }
+    }
+}
+
 impl<'a> ToTokens for FieldMember<'a> {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
         match self {
@@ -247,10 +275,51 @@ enum FieldAction<'a> {
 }
 
 impl<'a> FieldAction<'a> {
+    fn build_field(&self) -> TokenStream2 {
+        let member = self.member();
+        let ty = self.ty();
+        let field_ty = if self.is_patch() {
+            quote! { #ty::Patch }
+        } else {
+            quote! { #ty }
+        };
+        match member {
+            FieldMember::Named(name) => quote! { #name : #field_ty },
+            FieldMember::Unnamed(_) => quote! { #field_ty },
+        }
+    }
+
+    fn build_update_statement(
+        &self,
+        patch_trait: &TokenStream2,
+        patch_index: usize,
+    ) -> TokenStream2 {
+        let member = self.member();
+        let patch_member = member.patch_member(patch_index);
+        match self {
+            FieldAction::Keep { .. } => {
+                quote! { self.#member = patch.#patch_member; }
+            }
+            FieldAction::Patch { .. } => {
+                quote! { #patch_trait::patch(&mut self.#member, patch.#patch_member); }
+            }
+        }
+    }
+
     fn member(&self) -> &FieldMember<'a> {
         match self {
             FieldAction::Keep { member, .. } | FieldAction::Patch { member, .. } => member,
         }
+    }
+
+    fn ty(&self) -> &'a Type {
+        match self {
+            FieldAction::Keep { ty, .. } | FieldAction::Patch { ty, .. } => ty,
+        }
+    }
+
+    fn is_patch(&self) -> bool {
+        matches!(self, FieldAction::Patch { .. })
     }
 
     fn build_initializer_expr(&self) -> TokenStream2 {
@@ -272,28 +341,20 @@ fn is_patchable_attr(attr: &Attribute) -> bool {
     attr.path().is_ident(PATCHABLE)
 }
 
-fn patchable_attr_has_param(attr: &Attribute, param: &str) -> bool {
-    is_patchable_attr(attr)
-        && attr
-            .parse_nested_meta(|meta| {
-                if meta.path.is_ident(param) {
-                    Ok(())
-                } else {
-                    Err(meta.error("unrecognized `patchable` parameter"))
-                }
-            })
-            .is_ok()
-}
-
-fn has_patchable_attr(field: &Field) -> bool {
-    field.attrs.iter().any(is_patchable_attr)
-}
-
 pub fn has_patchable_skip_attr(field: &Field) -> bool {
-    field
-        .attrs
-        .iter()
-        .any(|attr| patchable_attr_has_param(attr, "skip"))
+    field.attrs.iter().any(|attr| {
+        if !is_patchable_attr(attr) {
+            return false;
+        }
+        let mut has_skip = false;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("skip") {
+                has_skip = true;
+            }
+            Ok(())
+        });
+        has_skip
+    })
 }
 
 struct SimpleTypeCollector<'a> {

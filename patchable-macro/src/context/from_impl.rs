@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::Fields;
+use syn::{Fields, WherePredicate, parse_quote};
 
 use crate::context::MacroContext;
 
@@ -53,13 +53,17 @@ impl<'a> MacroContext<'a> {
         }
     }
 
-    fn build_where_clause_for_from_impl(&self) -> TokenStream2 {
+    fn build_where_clause_for_from_impl(&self) -> Option<syn::WhereClause> {
         let patchable_trait = &self.patchable_trait;
-        self.build_where_clause_for_patchable_types(|ty| {
-            quote! {
-                #ty: #patchable_trait,
-                <#ty as #patchable_trait>::Patch: ::core::convert::From<#ty>,
-            }
-        })
+        let trait_bounds: Vec<WherePredicate> = self
+            .iter_patchable_type_params()
+            .flat_map(|ty| {
+                [
+                    parse_quote! { #ty: #patchable_trait },
+                    parse_quote! { #ty::Patch: ::core::convert::From<#ty> },
+                ]
+            })
+            .collect();
+        self.extend_where_clause(&trait_bounds)
     }
 }
