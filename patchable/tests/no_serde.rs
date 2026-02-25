@@ -32,6 +32,15 @@ struct AllSkipped {
     marker: fn(i32) -> i32,
 }
 
+#[patchable_model]
+#[derive(Clone, Debug, PartialEq)]
+struct FieldWithNonPatchableAttrBeforeSkip {
+    value: i32,
+    #[allow(dead_code)]
+    #[patchable(skip)]
+    sticky: u32,
+}
+
 #[test]
 fn test_patchable_model_and_derive_generate_patch_types_without_serde() {
     fn assert_patchable<T: patchable::Patchable + patchable::Patch>() {}
@@ -64,4 +73,12 @@ fn test_patch_methods_are_generated_without_serde() {
 
     let value = AllSkipped { marker: plus_one };
     assert_eq!((value.marker)(1), 2);
+}
+
+#[test]
+fn test_patchable_skip_works_with_non_patchable_field_attribute() {
+    let _: fn(
+        &mut FieldWithNonPatchableAttrBeforeSkip,
+        <FieldWithNonPatchableAttrBeforeSkip as patchable::Patchable>::Patch,
+    ) = <FieldWithNonPatchableAttrBeforeSkip as patchable::Patch>::patch;
 }
