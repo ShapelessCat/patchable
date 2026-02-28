@@ -1,7 +1,7 @@
 use patchable::patchable_model;
 use serde::{Deserialize, Serialize};
 
-pub fn identity(x: &i32) -> i32 {
+pub const fn identity(x: &i32) -> i32 {
     *x
 }
 

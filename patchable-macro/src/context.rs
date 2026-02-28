@@ -306,19 +306,19 @@ impl<'a> FieldAction<'a> {
         }
     }
 
-    fn member(&self) -> &FieldMember<'a> {
+    const fn member(&self) -> &FieldMember<'a> {
         match self {
             FieldAction::Keep { member, .. } | FieldAction::Patch { member, .. } => member,
         }
     }
 
-    fn ty(&self) -> &'a Type {
+    const fn ty(&self) -> &'a Type {
         match self {
             FieldAction::Keep { ty, .. } | FieldAction::Patch { ty, .. } => ty,
         }
     }
 
-    fn is_patch(&self) -> bool {
+    const fn is_patch(&self) -> bool {
         matches!(self, FieldAction::Patch { .. })
     }
 
