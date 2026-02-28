@@ -1,6 +1,6 @@
 use patchable::patchable_model;
 
-fn plus_one(x: i32) -> i32 {
+const fn plus_one(x: i32) -> i32 {
     x + 1
 }
 
