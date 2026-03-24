@@ -1,3 +1,19 @@
+# ⚠️ Archived: Project Moved to `recallable`
+
+This repository is no longer maintained and has been archived for historical
+reference. Active development by the original author continues under the name
+[**`recallable`**](https://github.com/ShapelessCat/recallable).
+
+**Why the name change?** The term `patchable` typically implies a patch, delta,
+or partial update pattern. Since this project is actually built around the
+Memento design pattern for state management, the name `recallable` was chosen to
+accurately reflect its core architecture. The author may unarchive this
+repository at a later date to implement a real patch, delta, or partial update
+pattern.
+
+Please visit [**`recallable`**](https://github.com/ShapelessCat/recallable) for
+ongoing development, updates, and issues.
+
 # Patchable
 
 [![CI](https://github.com/ShapelessCat/patchable/actions/workflows/ci.yaml/badge.svg)](https://github.com/ShapelessCat/patchable/actions/workflows/ci.yaml)
